@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>spiderbot_description</name>
+  <version>0.0.0</version>
+  <description>
+    URDF model of the Spiderbot hexapod (a primitive-geometry stand-in for the
+    Hiwonder JetHexa) and a standalone launch file for viewing it in Foxglove.
+  </description>
+
+  <maintainer email="dmiu7957@todo.todo">dmiu7957</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>urdf</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher_gui</exec_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+</package>

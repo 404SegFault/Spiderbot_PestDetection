@@ -1,0 +1,19 @@
+<launch>
+  <!-- Standalone model check: URDF + TF only, no Gazebo. Run rosbridge separately
+       to view it in Foxglove. -->
+  <arg name="model" default="$(find spiderbot_description)/urdf/spiderbot.urdf.xacro"/>
+  <!-- joint_state_publisher_gui needs an X display (e.g. `ssh -Y` into the VM with
+       XQuartz running on the Mac). Defaults to on when $DISPLAY is set; otherwise
+       joint_sweep.py animates every joint headlessly instead. -->
+  <arg name="gui" default="$(eval optenv('DISPLAY', '') != '')"/>
+
+  <param name="robot_description" command="$(find xacro)/xacro '$(arg model)'"/>
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"/>
+
+  <!-- Foxglove can't read ROS params over rosbridge, so mirror the URDF onto a topic -->
+  <node name="robot_description_publisher" pkg="spiderbot_description" type="robot_description_publisher.py"/>
+
+  <node if="$(arg gui)" name="joint_state_publisher_gui" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui"/>
+  <node unless="$(arg gui)" name="joint_sweep" pkg="spiderbot_description" type="joint_sweep.py"/>
+</launch>

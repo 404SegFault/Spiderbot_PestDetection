@@ -1,0 +1,127 @@
+<?xml version="1.0"?>
+<!--
+  Spiderbot hexapod: primitive-geometry stand-in for the Hiwonder JetHexa (18 DOF).
+
+  No vendor URDF/meshes are used. Every dimension below is an ESTIMATE, sized to
+  roughly match JetHexa's published overall size (387 x 356 x 210 mm, legs included).
+  Replace them with measured values once the real robot is available.
+
+  Conventions (REP-103): base_link at the body centre, x forward, y left, z up.
+  Layout: rectangular body, two legs per side (front / middle / rear); front and
+  rear legs are splayed 45 deg from the sides.
+
+  Per leg, <leg> = front_left | middle_left | rear_left | front_right | middle_right | rear_right:
+    links:  <leg>_coxa_link -> <leg>_femur_link -> <leg>_tibia_link -> <leg>_foot_link
+    joints: <leg>_coxa_joint, <leg>_femur_joint, <leg>_tibia_joint (revolute),
+            <leg>_foot_joint (fixed, marks the foot tip)
+
+  Zero pose is a standing pose: coxa and femur point straight out horizontally,
+  tibia hangs straight down. Positive joint angles mean:
+    coxa  - counter-clockwise seen from above (same axis on both sides)
+    femur - leg lifts up
+    tibia - foot swings outward, away from the body
+-->
+<robot name="spiderbot" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Body box (ESTIMATE) -->
+  <xacro:property name="body_length" value="0.20"/>
+  <xacro:property name="body_width" value="0.15"/>
+  <xacro:property name="body_height" value="0.05"/>
+
+  <!-- Leg segment lengths, joint axis to joint axis (ESTIMATE) -->
+  <xacro:property name="coxa_length" value="0.045"/>
+  <xacro:property name="femur_length" value="0.075"/>
+  <xacro:property name="tibia_length" value="0.125"/>
+
+  <!-- Joint limits are placeholders, not JetHexa servo specs. effort/velocity are
+       required by URDF but unused by the display tools. -->
+  <xacro:property name="coxa_limit" value="${pi/4}"/>
+  <xacro:property name="femur_limit" value="${pi/2}"/>
+  <xacro:property name="tibia_limit" value="${pi/2}"/>
+  <xacro:property name="joint_effort" value="3.0"/>
+  <xacro:property name="joint_velocity" value="5.0"/>
+
+  <material name="body"><color rgba="0.25 0.25 0.25 1"/></material>
+  <material name="heading"><color rgba="0.85 0.1 0.1 1"/></material>
+  <material name="coxa"><color rgba="0.95 0.55 0.1 1"/></material>
+  <material name="femur"><color rgba="0.75 0.75 0.75 1"/></material>
+  <material name="tibia"><color rgba="0.15 0.4 0.85 1"/></material>
+
+  <link name="base_link">
+    <visual>
+      <geometry><box size="${body_length} ${body_width} ${body_height}"/></geometry>
+      <material name="body"/>
+    </visual>
+    <!-- Heading marker on the front edge (where JetHexa's camera sits) -->
+    <visual>
+      <origin xyz="${body_length/2 - 0.01} 0 ${body_height/2 + 0.01}"/>
+      <geometry><box size="0.02 0.06 0.02"/></geometry>
+      <material name="heading"/>
+    </visual>
+  </link>
+
+  <!-- One 3-DOF leg mounted on base_link at (x, y), with its local x axis rotated
+       by yaw so that it points away from the body. -->
+  <xacro:macro name="leg" params="prefix x y yaw">
+    <joint name="${prefix}_coxa_joint" type="revolute">
+      <parent link="base_link"/>
+      <child link="${prefix}_coxa_link"/>
+      <origin xyz="${x} ${y} 0" rpy="0 0 ${yaw}"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="${-coxa_limit}" upper="${coxa_limit}" effort="${joint_effort}" velocity="${joint_velocity}"/>
+    </joint>
+    <link name="${prefix}_coxa_link">
+      <visual>
+        <origin xyz="${coxa_length/2} 0 0"/>
+        <geometry><box size="${coxa_length} 0.03 0.025"/></geometry>
+        <material name="coxa"/>
+      </visual>
+    </link>
+
+    <joint name="${prefix}_femur_joint" type="revolute">
+      <parent link="${prefix}_coxa_link"/>
+      <child link="${prefix}_femur_link"/>
+      <origin xyz="${coxa_length} 0 0"/>
+      <axis xyz="0 -1 0"/>
+      <limit lower="${-femur_limit}" upper="${femur_limit}" effort="${joint_effort}" velocity="${joint_velocity}"/>
+    </joint>
+    <link name="${prefix}_femur_link">
+      <visual>
+        <origin xyz="${femur_length/2} 0 0"/>
+        <geometry><box size="${femur_length} 0.02 0.02"/></geometry>
+        <material name="femur"/>
+      </visual>
+    </link>
+
+    <joint name="${prefix}_tibia_joint" type="revolute">
+      <parent link="${prefix}_femur_link"/>
+      <child link="${prefix}_tibia_link"/>
+      <origin xyz="${femur_length} 0 0"/>
+      <axis xyz="0 -1 0"/>
+      <limit lower="${-tibia_limit}" upper="${tibia_limit}" effort="${joint_effort}" velocity="${joint_velocity}"/>
+    </joint>
+    <link name="${prefix}_tibia_link">
+      <visual>
+        <!-- Cylinders are aligned with z, so this hangs straight down at zero -->
+        <origin xyz="0 0 ${-tibia_length/2}"/>
+        <geometry><cylinder radius="0.008" length="${tibia_length}"/></geometry>
+        <material name="tibia"/>
+      </visual>
+    </link>
+
+    <joint name="${prefix}_foot_joint" type="fixed">
+      <parent link="${prefix}_tibia_link"/>
+      <child link="${prefix}_foot_link"/>
+      <origin xyz="0 0 ${-tibia_length}"/>
+    </joint>
+    <link name="${prefix}_foot_link"/>
+  </xacro:macro>
+
+  <xacro:leg prefix="front_left"   x="${body_length/2}"  y="${body_width/2}"  yaw="${pi/4}"/>
+  <xacro:leg prefix="middle_left"  x="0"                 y="${body_width/2}"  yaw="${pi/2}"/>
+  <xacro:leg prefix="rear_left"    x="${-body_length/2}" y="${body_width/2}"  yaw="${3*pi/4}"/>
+  <xacro:leg prefix="front_right"  x="${body_length/2}"  y="${-body_width/2}" yaw="${-pi/4}"/>
+  <xacro:leg prefix="middle_right" x="0"                 y="${-body_width/2}" yaw="${-pi/2}"/>
+  <xacro:leg prefix="rear_right"   x="${-body_length/2}" y="${-body_width/2}" yaw="${-3*pi/4}"/>
+
+</robot>
