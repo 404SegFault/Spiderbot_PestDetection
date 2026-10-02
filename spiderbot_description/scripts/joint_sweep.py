@@ -29,7 +29,7 @@ def main():
     pub = rospy.Publisher("joint_states", JointState, queue_size=1)
 
     msg = JointState(name=[name for name, _, _ in joints])
-    rate = rospy.Rate(30)
+    rate = rospy.Rate(10)  # same as joint_state_publisher_gui; keeps /tf volume low over rosbridge
     start = rospy.get_time()
     while not rospy.is_shutdown():
         t = rospy.get_time() - start

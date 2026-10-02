@@ -9,6 +9,7 @@ All dimensions are estimates until we have the real robot.
 
 ```bash
 cd ~/spiderbot_ws
+rosdep update --include-eol-distros               # Melodic is EOL; plain `rosdep update` skips it
 rosdep install --from-paths src --ignore-src -y   # pulls joint_state_publisher_gui if missing
 catkin_make
 source devel/setup.bash
