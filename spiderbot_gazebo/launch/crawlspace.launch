@@ -1,0 +1,34 @@
+<launch>
+  <!-- Crawlspace world in Gazebo, mirrored into Foxglove on /world_markers.
+       Run rosbridge separately to view it in Foxglove. -->
+  <arg name="world" default="$(find spiderbot_gazebo)/worlds/crawlspace.world"/>
+  <!-- Gazebo runs headless (gzserver only); its GUI can't open on the VM -->
+  <arg name="gazebo" default="true"/>
+  <!-- Show the robot model standing at the spawn point for scale. Visual only:
+       the robot isn't simulated in Gazebo yet. -->
+  <arg name="preview_robot" default="true"/>
+  <!-- Spawn point: just inside the access opening, facing into the crawlspace.
+       Keep in sync with SPAWN in scripts/generate_crawlspace.py (terrain is flat there). -->
+  <arg name="spawn_x" default="-3.3"/>
+  <arg name="spawn_y" default="0.0"/>
+  <arg name="spawn_z" default="0.125"/>
+  <arg name="spawn_yaw" default="0.0"/>
+
+  <include if="$(arg gazebo)" file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(arg world)"/>
+    <arg name="gui" value="false"/>
+  </include>
+
+  <node name="world_markers" pkg="spiderbot_gazebo" type="world_markers.py">
+    <param name="world" value="$(arg world)"/>
+    <param name="model_path" value="$(find spiderbot_gazebo)/models"/>
+    <!-- Cut away the floor above so the crawlspace is visible from above in Foxglove -->
+    <param name="hide_models" value="subfloor"/>
+  </node>
+
+  <group if="$(arg preview_robot)">
+    <include file="$(find spiderbot_description)/launch/display.launch"/>
+    <node name="robot_preview_tf" pkg="tf2_ros" type="static_transform_publisher"
+          args="$(arg spawn_x) $(arg spawn_y) $(arg spawn_z) $(arg spawn_yaw) 0 0 world base_link"/>
+  </group>
+</launch>
