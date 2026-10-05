@@ -26,6 +26,18 @@
     <param name="hide_models" value="subfloor"/>
   </node>
 
+  <!-- Ground-truth soil moisture as an occupancy grid on /moisture_truth, drawn 12 cm above
+       the dirt so the bumps don't hide it. In Foxglove use Color mode "Costmap": blue = dry, red = wet. -->
+  <node name="moisture_truth" pkg="map_server" type="map_server"
+        args="$(find spiderbot_gazebo)/worlds/crawlspace_moisture.yaml">
+    <param name="frame_id" value="moisture_map"/>
+    <remap from="map" to="moisture_truth"/>
+    <remap from="map_metadata" to="moisture_truth_metadata"/>
+    <remap from="static_map" to="moisture_truth_static_map"/>
+  </node>
+  <node name="moisture_map_tf" pkg="tf2_ros" type="static_transform_publisher"
+        args="0 0 0.12 0 0 0 world moisture_map"/>
+
   <group if="$(arg preview_robot)">
     <include file="$(find spiderbot_description)/launch/display.launch"/>
     <node name="robot_preview_tf" pkg="tf2_ros" type="static_transform_publisher"

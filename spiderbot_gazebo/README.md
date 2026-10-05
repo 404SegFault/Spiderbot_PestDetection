@@ -1,8 +1,9 @@
 # spiderbot_gazebo
 
 Gazebo 9 world for the pest-detection PoC: the crawlspace under a house, with
-uneven dirt, piers, plumbing and clutter for the hexapod to navigate. Gazebo runs
-headless on the VM, and the same world is mirrored to Foxglove as markers.
+uneven dirt, piers, plumbing and clutter for the hexapod to navigate, pest signs to
+find, and a ground-truth soil-moisture map. Gazebo runs headless on the VM, and the
+same world is mirrored to Foxglove as markers.
 
 ## Run and view in Foxglove
 
@@ -18,10 +19,13 @@ In Foxglove's 3D panel:
 
 1. Under **Frame**, set **Display frame** to `world`.
 2. Under **Topics**, turn on `/world_markers` (eye icon). It takes a few seconds to appear,
-   because the terrain mesh is about 2.4 MB over rosbridge.
+   because the meshes are about 3.4 MB over rosbridge.
 3. Each Gazebo model is a marker namespace under `/world_markers` (`terrain`, `piers`,
-   `plumbing`, ...), so you can hide parts. The `subfloor` is left out on purpose, so you
-   can see in from above.
+   `termite_mud_tubes`, `decoys`, ...), so you can hide parts. The `subfloor` is left out
+   on purpose, so you can see in from above.
+4. To see the ground-truth moisture, turn on `/moisture_truth` and set its **Color mode** to
+   **Costmap** (blue = dry, red = wet). It's drawn 12 cm above the dirt so the bumps don't
+   hide it; turn it off again to see the ground.
 
 | Launch arg | Default | |
 |---|---|---|
@@ -44,15 +48,32 @@ Origin is the centre of the crawlspace at nominal dirt level, with x along its l
 | Services | PVC drain rising into the floor, two copper supply lines, an HVAC flex duct and register boot |
 | Clutter | 30 rocks, 5 wood offcuts, a fallen insulation batt |
 | Lighting | Dim ambient light, a warm work light near the centre, daylight through the access opening |
+| Moisture | Dry dirt (~18 on a 1-98 scale), wet around a leaking drain riser and a dripping supply-line fitting, seeping along the north wall, wetter in hollows and the rut. Dirt above 45 is visibly darker. |
+| Pest signs | Termite mud tubes on pier 0 and the north wall, damaged wood on joists and the rim by the leak, three rodent-dropping clusters, two burrows |
+| Decoys | A mud smear (not a tube), an old dry water stain on a joist, loose pebbles (not droppings) |
 
 Everything is static. The piers, jack posts and clutter are the obstacles at robot
-height; the pipes and duct hang 0.43 m or more above the dirt.
+height; the pipes and duct hang 0.43 m or more above the dirt. Pest signs and decoys
+are visual only, so they don't get in the robot's way.
+
+### Answer key
+
+`worlds/crawlspace_ground_truth.yaml` lists every pest sign and decoy: its type, position,
+whether it's a decoy, and the soil moisture there. Detection runs get scored against it.
+`worlds/crawlspace_moisture.yaml` (map_server format) is the full ground-truth moisture
+map; the simulated moisture probe will read from it.
 
 ## Changing the world
 
-`worlds/crawlspace.world` and `models/crawlspace_terrain/meshes/terrain.stl` are generated.
-Don't edit them by hand. Instead, edit the layout in `scripts/generate_crawlspace.py`, then
-run it and commit the regenerated files:
+These files are generated, so don't edit them by hand:
+
+- `worlds/crawlspace.world`
+- `worlds/crawlspace_moisture.pgm` and `.yaml`
+- `worlds/crawlspace_ground_truth.yaml`
+- `models/crawlspace_terrain/meshes/*.stl`
+
+Instead, edit the layout in `scripts/generate_crawlspace.py`, then run it and commit the
+regenerated files:
 
 ```bash
 python scripts/generate_crawlspace.py   # Python 2 or 3, no extra packages
