@@ -76,6 +76,7 @@ Add these to the `roslaunch spiderbot_gazebo crawlspace.launch` line:
 |---|---|
 | `gazebo:=false` | Skip Gazebo; Foxglove still shows the world markers, moisture map and robot model. No sensors. Doesn't need `xvfb-run`. |
 | `robot:=false` | World only, no robot. |
+| `mapping:=false` | Don't build maps (no gmapping or moisture mapper). Mapping needs Gazebo's lidar, so it does nothing with `gazebo:=false`. |
 | `spawn_x:=... spawn_y:=... spawn_yaw:=...` | Start the robot somewhere else (default `-3.3 0 0`, by the access opening). |
 
 ### Robot model on its own (no Gazebo)
@@ -115,7 +116,24 @@ prints `<mac-ip>`. Allow incoming connections if macOS asks.
 WASD, Q/E to sidestep, Space to stop). Or use Foxglove's **Teleop** panel on topic `/cmd_vel`
 with its publish rate set to 10 Hz; at lower rates the robot stops between messages.
 
-## 5. View in Foxglove (Mac)
+## 5. Build and save maps
+
+Mapping runs automatically with the simulation. Just drive around: gmapping builds the
+floor plan from the lidar, and the moisture probe under the robot's nose fills in a moisture
+map along the way. Drive slowly through the areas you care about, and turn gently; fast
+spins make the floor plan smear.
+
+To save both maps, tap **Save maps** on the phone page, or run:
+
+```bash
+rosservice call /save_maps
+```
+
+Each save makes a new folder `~/spiderbot_maps/<date>_<time>/` on the VM with `map.pgm/.yaml`
+(floor plan) and `moisture.pgm/.yaml` (moisture map), in map_server format. To copy them to
+the Mac, run this on the Mac: `scp -r <user>@<vm-ip>:spiderbot_maps ~/Desktop/`
+
+## 6. View in Foxglove (Mac)
 
 1. Open Foxglove → **Open connection** → **Rosbridge** → `ws://<vm-ip>:9090`.
 2. Add a **3D** panel. In its settings:
@@ -125,8 +143,11 @@ with its publish rate set to 10 Hz; at lower rates the robot stops between messa
      - `/robot_description`: the robot model.
      - `/scan`: lidar hits. In its settings set **Color mode** to **Flat** (pick a bright
        colour) and **Point size** to about 4.
-     - `/moisture_truth` (optional): ground-truth moisture. Set **Color mode** to
-       **Costmap** (blue = dry, red = wet).
+     - `/map`: the floor plan being built. Set **Color mode** to **Map**.
+     - `/moisture_map`: the measured moisture. Set **Color mode** to **Costmap** (blue = dry,
+       red = wet; unmeasured areas are transparent).
+     - `/moisture_truth` (optional): the ground-truth moisture (answer key), same colours.
+       Turn it off to see the measured map.
    - **Transforms:** switch **Labels** off to hide frame names; switch **Enable
      preloading** off to avoid the "At most ... transforms" error on long sessions.
 3. Add **Image** panels:
@@ -140,7 +161,7 @@ If `ws://<vm-ip>:9090` won't connect, tunnel the port through SSH instead. Open 
 session with `ssh -L 9090:localhost:9090 <user>@<vm-ip>`, then connect Foxglove to
 `ws://localhost:9090`.
 
-## 6. Check what's running (any extra session)
+## 7. Check what's running (any extra session)
 
 ```bash
 rosnode list
@@ -161,14 +182,18 @@ gz stats                                   # Gazebo speed: Factor near 1.00 mean
 | `/cmd_vel` | Velocity commands in (forward, sideways, turn) |
 | `/odom` | Odometry: where the robot thinks it is, with realistic drift. Also TF `odom -> base_footprint`. |
 | `/ground_truth/odom` | Where the robot really is (simulation only, for checking and scoring) |
+| `/map` | Floor plan from gmapping SLAM |
+| `/moisture` | Moisture probe readings (`relative_humidity` 0.01 dry to 0.98 saturated), 5 Hz |
+| `/moisture_map` | Measured moisture map: 1 (dry) to 98 (saturated), 0 = not measured |
+| `/save_maps` (service) | Save the floor plan and moisture map to `~/spiderbot_maps/` |
 | `/joint_states` | Leg joint angles (walking animation) |
-| `/tf`, `/tf_static` | Coordinate frames: `world -> odom -> base_footprint -> base_link -> ...` |
+| `/tf`, `/tf_static` | Coordinate frames: `world -> map -> odom -> base_footprint -> base_link -> ...` (`map -> odom` comes from SLAM; `world` is the simulator's frame, fixed to where the robot started) |
 | `/scan` | Lidar, 360 deg, 7 Hz |
 | `/camera/rgb/image_raw` (`/compressed`) | Colour camera, 640x480, 10 Hz |
 | `/camera/depth/image_raw`, `/camera/depth/points` | Depth image (metres) and point cloud, 0.6-8 m |
 | `/camera/depth/image_raw_throttle` | 1 Hz depth copy for Foxglove |
 
-## 7. Shut down
+## 8. Shut down
 
 Press **Ctrl-C** in each session (Gazebo can take ~15 seconds to stop). Then make
 sure nothing was left behind, which would stop the next launch:
@@ -178,13 +203,13 @@ killall -9 gzserver gzclient 2>/dev/null
 rosclean purge -y     # deletes old ROS logs; run when it warns the log folder is over 1 GB
 ```
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | `[gazebo-1] process has died ... exit code 255` | An old gzserver is still running. `killall -9 gzserver gzclient`, then launch again. |
 | `rosdep`: `Cannot locate rosdep definition for [...]` | `rosdep update --include-eol-distros`, then rerun `rosdep install`. |
-| Foxglove: "Check that the rosbridge WebSocket server at ws://localhost:9090 is reachable" | Use `ws://<vm-ip>:9090`, or the SSH tunnel in section 5. Check session 2 is still running. |
+| Foxglove: "Check that the rosbridge WebSocket server at ws://localhost:9090 is reachable" | Use `ws://<vm-ip>:9090`, or the SSH tunnel in section 6. Check session 2 is still running. |
 | Foxglove: only coordinate axes, no robot | Turn on `/robot_description` under **Topics**. Don't add it as a custom URDF layer: over rosbridge that gives "Invalid topic". |
 | Foxglove: "Failed to process all transforms on topic /tf" | 3D panel → **Transforms** → switch off **Enable preloading**, then reconnect. |
 | Foxglove, on `/scan`: "N Infinity invalid values detected" | Expected. Beams that hit nothing (for example out through the access opening) are reported as infinity, the ROS standard for "no return", and mapping uses them as free space. Set `/scan`'s **Color mode** to **Flat** to clear the warning. |
@@ -193,10 +218,12 @@ rosclean purge -y     # deletes old ROS logs; run when it warns the log folder i
 | The robot won't walk forward | Its lidar sees something within 0.3 m in that direction (safety stop). Back up or turn away. |
 | Phone page says "no connection to ws://...:9090" | Session 2 must be `web_teleop.launch` and still running. If the phone can't reach the VM, use the port forwarding in section 4. |
 | Camera view takes a while to appear | Normal the first time after launching (5-10 s while Gazebo sets up rendering). |
+| No `/map`, or the moisture map stays empty | Mapping needs the lidar, so Gazebo must be running (not `gazebo:=false`). The floor plan appears after the robot has moved about 10 cm. |
+| Floor plan has doubled or smeared walls | You turned too fast for the scan matching. Drive more slowly; the map usually cleans up as you revisit an area. |
 | Camera or robot motion very slow or frozen | Check Gazebo's speed with `gz stats` (Factor should be near 1.00). If it's far lower, something is starving the VM's CPU; restart the simulation. |
 | The first camera frame you grab looks out of date | Normal: Gazebo pauses cameras with no subscribers, so the first frame after subscribing is old. Later frames are live. |
 
-## 9. Changing the crawlspace
+## 10. Changing the crawlspace
 
 The world, its meshes, the moisture map and the answer key are generated. Edit the layout
 in `spiderbot_gazebo/scripts/generate_crawlspace.py`, then regenerate (works on the VM or the Mac,

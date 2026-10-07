@@ -31,6 +31,7 @@
   <xacro:gazebo_color link="base_link" material="Gazebo/DarkGrey"/>
   <xacro:gazebo_color link="laser_link" material="Gazebo/Black"/>
   <xacro:gazebo_color link="camera_link" material="Gazebo/Black"/>
+  <xacro:gazebo_color link="moisture_probe_link" material="Gazebo/Turquoise"/>
 
   <!-- Called by the leg macro in spiderbot.urdf.xacro -->
   <xacro:macro name="leg_gazebo" params="prefix">

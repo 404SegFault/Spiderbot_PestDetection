@@ -20,8 +20,10 @@ separately as well.
 | ⟲ / ⟳ | Turn left / right on the spot (hold) |
 | ◀ side / side ▶ | Sidestep left / right (hold) |
 | Speed | Slow (0.06 m/s, 0.3 rad/s) or fast (0.15 m/s, 0.6 rad/s) |
+| Save maps | Save the floor plan and moisture map on the VM (calls `/save_maps`) |
 | STOP | Stop immediately |
 
+The header shows the connection, the live moisture probe reading, and save confirmations.
 Buttons can be combined (forward + turn walks an arc). On a computer the keyboard works
 too: arrows or WASD to drive, Q/E to sidestep, F for speed, Space to stop.
 

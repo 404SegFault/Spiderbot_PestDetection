@@ -14,7 +14,9 @@
   Sensors (JetHexa Ultimate kit): laser_link is the lidar's scan centre on top of the
   body; camera_link is the depth camera on the front edge (x forward, tilted down), and
   camera_optical_frame is the same point in the optical convention (z forward, x right,
-  y down) that its images use. Gazebo sensor settings are in spiderbot.gazebo.xacro.
+  y down) that its images use. moisture_probe_link is the tip of a soil moisture probe
+  under the front of the body, touching the ground. Gazebo sensor settings are in
+  spiderbot.gazebo.xacro.
 
   Masses are ESTIMATES (about 2.5 kg in total). Every part has inertia matching its
   visual, which Gazebo needs. Collision shapes are off by default (xacro arg
@@ -64,6 +66,9 @@
   <xacro:property name="lidar_xyz" value="-0.02 0 0.065"/>
   <xacro:property name="camera_xyz" value="${body_length/2 + 0.0125} 0 ${body_height/2 + 0.0125}"/>
   <xacro:property name="camera_tilt" value="${10*pi/180}"/>
+  <!-- Soil moisture probe: a rod from the underside of the body to the ground, between the front legs -->
+  <xacro:property name="probe_x" value="0.06"/>
+  <xacro:property name="probe_length" value="${tibia_length - body_height/2}"/>
 
   <material name="body"><color rgba="0.25 0.25 0.25 1"/></material>
   <material name="heading"><color rgba="0.85 0.1 0.1 1"/></material>
@@ -71,6 +76,7 @@
   <material name="femur"><color rgba="0.75 0.75 0.75 1"/></material>
   <material name="tibia"><color rgba="0.15 0.4 0.85 1"/></material>
   <material name="sensor"><color rgba="0.1 0.1 0.1 1"/></material>
+  <material name="probe"><color rgba="0.2 0.75 0.75 1"/></material>
 
   <xacro:arg name="collisions" default="false"/>
 
@@ -164,6 +170,16 @@
     <origin rpy="${-pi/2} 0 ${-pi/2}"/>
   </joint>
   <link name="camera_optical_frame"/>
+
+  <!-- moisture_probe_link is the probe tip, on the ground; the rod rises from it to the body -->
+  <joint name="moisture_probe_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="moisture_probe_link"/>
+    <origin xyz="${probe_x} 0 ${-tibia_length}"/>
+  </joint>
+  <link name="moisture_probe_link">
+    <xacro:cylinder_part radius="0.004" length="${probe_length}" xyz="0 0 ${probe_length/2}" mass="0.01" material="probe"/>
+  </link>
 
   <!-- One 3-DOF leg mounted on base_link at (x, y), with its local x axis rotated
        by yaw so that it points away from the body. -->

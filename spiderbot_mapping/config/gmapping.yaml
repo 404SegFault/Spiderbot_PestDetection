@@ -1,0 +1,23 @@
+# gmapping settings for the Spiderbot: 2D lidar SLAM producing /map and TF map -> odom.
+# Tuned for a small space and a slow robot; values not listed are gmapping's defaults.
+base_frame: base_footprint
+odom_frame: odom
+map_frame: map
+
+map_update_interval: 2.0   # seconds between /map updates (default 5)
+delta: 0.05                # map resolution, metres
+xmin: -10.0                # initial map extent, metres (grows if needed)
+ymin: -10.0
+xmax: 10.0
+ymax: 10.0
+
+maxRange: 10.0             # beams longer than this are ignored
+maxUrange: 8.0             # usable range for building the map; a crawlspace is under 10 m across
+lskip: 1                   # use every other beam: halves CPU with 720-beam scans
+particles: 30
+
+# Update the map every 10 cm or ~6 deg of movement (defaults 1 m / 0.5 rad are too coarse
+# for a robot walking at 0.15 m/s in an 8 x 6 m space), and every 2 s when standing still
+linearUpdate: 0.1
+angularUpdate: 0.1
+temporalUpdate: 2.0

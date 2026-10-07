@@ -51,6 +51,7 @@ Nodes on the VM use them directly.
 |---|---|---|
 | `gazebo` | `true` | Start gzserver with the world. `false` shows only the Foxglove markers. |
 | `robot` | `true` | Spawn the Spiderbot with its sensors, driven by `sim_walker.py` (below). |
+| `mapping` | `true` | Build the floor plan and moisture map while driving (`spiderbot_mapping`). |
 | `spawn_x/y/z/yaw` | `-3.3 0 0 0` | Where `base_footprint` spawns: on the dirt just inside the access opening, facing +x. |
 
 The ALSA sound errors in the Gazebo output are harmless on a VM without audio.
@@ -66,6 +67,14 @@ The ALSA sound errors in the Gazebo output are harmless on a VM without audio.
 Gazebo pauses a camera that has no subscribers, so the first frame after subscribing
 is the last one from before the pause; later frames are live. Nodes that read single
 frames with `rospy.wait_for_message` should skip the first.
+
+### Moisture probe (`scripts/moisture_probe.py`)
+
+Gazebo has no moisture sensor, so this simulates one: 5 times a second it reads the
+ground-truth moisture map (`worlds/crawlspace_moisture.yaml`) at the probe tip's true
+position (`moisture_probe_link`, under the front of the body), adds noise (standard
+deviation 2 on the 1-98 scale) and publishes `/moisture` (`sensor_msgs/RelativeHumidity`,
+0.01 dry to 0.98 saturated).
 
 ### Walking (`scripts/sim_walker.py`)
 
@@ -83,8 +92,9 @@ shows them stepping.
 | `/ground_truth/odom` | The true pose in the `world` frame, for checking and scoring (simulation only) |
 | `/joint_states` | Gait animation |
 
-The `odom` frame starts at the spawn pose (`world -> odom` is a fixed transform). From
-Step 4, mapping will publish `map -> odom` instead.
+Odometry and SLAM both start at the spawn pose, so a fixed transform there ties the
+simulator's `world` frame to them: `world -> map` when mapping (gmapping then publishes
+`map -> odom`), or `world -> odom` with `mapping:=false`.
 
 Safety: the robot stops if no command arrives for 0.4 s, and won't walk toward anything
 `/scan` sees within 0.3 m in its direction of travel (it can still turn and back away).

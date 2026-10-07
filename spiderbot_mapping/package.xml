@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>spiderbot_mapping</name>
+  <version>0.0.0</version>
+  <description>
+    Mapping for the Spiderbot: gmapping lidar SLAM for the floor plan, plus a soil moisture
+    map built from probe readings placed on the SLAM map. Robot-agnostic: runs on the
+    simulator or the real robot.
+  </description>
+
+  <maintainer email="dmiu7957@todo.todo">dmiu7957</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>gmapping</exec_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>python-numpy</exec_depend>
+</package>

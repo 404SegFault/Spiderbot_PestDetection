@@ -1,0 +1,11 @@
+<launch>
+  <!-- Mapping while driving: gmapping builds the floor plan (/map, TF map -> odom) from
+       /scan and odometry, and moisture_mapper builds /moisture_map from /moisture readings
+       placed on that map. Works on the simulator or the real robot: it only needs /scan,
+       /moisture and TF odom -> base_footprint -> sensor frames. -->
+  <node name="slam_gmapping" pkg="gmapping" type="slam_gmapping" output="log">
+    <rosparam command="load" file="$(find spiderbot_mapping)/config/gmapping.yaml"/>
+  </node>
+
+  <node name="moisture_mapper" pkg="spiderbot_mapping" type="moisture_mapper.py" output="screen"/>
+</launch>

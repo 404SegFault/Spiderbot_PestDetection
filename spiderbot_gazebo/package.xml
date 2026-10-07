@@ -68,6 +68,8 @@
   <exec_depend>topic_tools</exec_depend>
   <exec_depend>compressed_image_transport</exec_depend>
   <exec_depend>spiderbot_description</exec_depend>
+  <exec_depend>spiderbot_mapping</exec_depend>
+  <exec_depend>python-yaml</exec_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

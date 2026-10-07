@@ -8,6 +8,8 @@
   <!-- Gazebo runs headless (gzserver only); its GUI can't open on the VM -->
   <arg name="gazebo" default="true"/>
   <arg name="robot" default="true"/>
+  <!-- SLAM floor plan + moisture map while you drive (spiderbot_mapping) -->
+  <arg name="mapping" default="true"/>
   <!-- Spawn point for base_footprint: on the dirt just inside the access opening, facing
        into the crawlspace. Keep in sync with SPAWN in scripts/generate_crawlspace.py
        (the terrain is flat there). -->
@@ -61,8 +63,20 @@
       <param name="spawn_yaw" value="$(arg spawn_yaw)"/>
       <param name="terrain_mesh" value="$(find spiderbot_gazebo)/models/crawlspace_terrain/meshes/terrain.stl"/>
     </node>
-    <!-- The odom frame starts where the robot starts -->
-    <node name="odom_origin_tf" pkg="tf2_ros" type="static_transform_publisher"
+    <!-- Simulated soil moisture probe: reads the ground-truth map at the probe tip -->
+    <node name="moisture_probe" pkg="spiderbot_gazebo" type="moisture_probe.py">
+      <param name="truth_map" value="$(find spiderbot_gazebo)/worlds/crawlspace_moisture.yaml"/>
+    </node>
+
+    <!-- Odometry and SLAM both start where the robot starts, so the spawn pose ties the
+         simulator's world frame to them: world -> map (-> odom from gmapping) when mapping,
+         world -> odom when not. -->
+    <group if="$(arg mapping)">
+      <include file="$(find spiderbot_mapping)/launch/mapping.launch"/>
+      <node name="map_origin_tf" pkg="tf2_ros" type="static_transform_publisher"
+            args="$(arg spawn_x) $(arg spawn_y) 0 $(arg spawn_yaw) 0 0 world map"/>
+    </group>
+    <node unless="$(arg mapping)" name="odom_origin_tf" pkg="tf2_ros" type="static_transform_publisher"
           args="$(arg spawn_x) $(arg spawn_y) 0 $(arg spawn_yaw) 0 0 world odom"/>
     <!-- Raw depth images (~1.2 MB each) are too big to stream over rosbridge, so Foxglove
          gets this 1 Hz copy. The colour image streams as /camera/rgb/image_raw/compressed.

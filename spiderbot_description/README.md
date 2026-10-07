@@ -77,6 +77,7 @@ ground plane of `base_footprint`. For example, `front_left_foot_link` is at abou
 | `laser_link` | YDLIDAR G4 scan centre on top of the body, about 19 cm above the ground |
 | `camera_link` | Depth camera on the front edge, x forward, tilted 10 deg down (`camera_tilt` in the xacro) |
 | `camera_optical_frame` | Same point in the optical convention (z forward) that the images use |
+| `moisture_probe_link` | Tip of the soil moisture probe, on the ground under the front of the body |
 
 [urdf/spiderbot.gazebo.xacro](urdf/spiderbot.gazebo.xacro) holds everything that only
 Gazebo uses: the sensor plugins, Gazebo colours, and kinematic links. Kinematic means

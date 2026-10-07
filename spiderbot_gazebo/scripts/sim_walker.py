@@ -19,12 +19,14 @@ toward anything /scan sees closer than ~stop_distance in its direction of travel
 import math
 import random
 import struct
+import threading
 import xml.etree.ElementTree as ET
 
 import numpy as np
 import rospy
 import tf2_ros
 from gazebo_msgs.msg import ModelState
+from gazebo_msgs.srv import GetWorldProperties
 from geometry_msgs.msg import Quaternion, TransformStamped, Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState, LaserScan
@@ -154,6 +156,22 @@ class Walker(object):
         self.gazebo_pub = rospy.Publisher("/gazebo/set_model_state", ModelState, queue_size=1)
         rospy.Subscriber("cmd_vel", Twist, self.on_cmd, queue_size=1)
         rospy.Subscriber("scan", LaserScan, self.on_scan, queue_size=1)
+        self.in_gazebo = False
+        thread = threading.Thread(target=self.wait_for_model)
+        thread.daemon = True
+        thread.start()
+
+    def wait_for_model(self):
+        """Only send poses to Gazebo once it has spawned the robot (and never with gazebo:=false,
+        where there's no Gazebo): it logs an error for every pose sent before then."""
+        try:
+            rospy.wait_for_service("/gazebo/get_world_properties")
+            world = rospy.ServiceProxy("/gazebo/get_world_properties", GetWorldProperties)
+            while self.model_name not in world().model_names:
+                rospy.sleep(0.5)
+            self.in_gazebo = True
+        except (rospy.ROSInterruptException, rospy.ServiceException):
+            pass
 
     def on_cmd(self, msg):
         self.cmd = [clamp(msg.linear.x, self.max_linear), clamp(msg.linear.y, self.max_linear),
@@ -243,7 +261,8 @@ class Walker(object):
         state = ModelState(model_name=self.model_name, reference_frame="world")
         state.pose.position.x, state.pose.position.y, state.pose.position.z = self.x, self.y, self.z
         state.pose.orientation = truth_q
-        self.gazebo_pub.publish(state)
+        if self.in_gazebo:
+            self.gazebo_pub.publish(state)
 
         t = TransformStamped()
         t.header.stamp, t.header.frame_id, t.child_frame_id = stamp, "odom", "base_footprint"
