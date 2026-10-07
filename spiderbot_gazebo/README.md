@@ -2,18 +2,26 @@
 
 Gazebo 9 world for the pest-detection PoC: the crawlspace under a house, with
 uneven dirt, piers, plumbing and clutter for the hexapod to navigate, pest signs to
-find, and a ground-truth soil-moisture map. Gazebo runs headless on the VM, and the
-same world is mirrored to Foxglove as markers.
+find, and a ground-truth soil-moisture map. The Spiderbot stands at the spawn point
+with a working lidar and depth camera. Gazebo runs headless on the VM, and the same
+world is mirrored to Foxglove as markers.
 
 ## Run and view in Foxglove
 
+The robot's camera needs an X display to render, and the VM has none, so Gazebo runs
+inside Xvfb (a virtual display). Install it once with `sudo apt install xvfb`.
+
 ```bash
 # SSH session 1
-roslaunch spiderbot_gazebo crawlspace.launch
+xvfb-run -a -s "-screen 0 1280x1024x24" roslaunch spiderbot_gazebo crawlspace.launch
 
 # SSH session 2
 roslaunch rosbridge_server rosbridge_websocket.launch
 ```
+
+Without `xvfb-run` everything still runs, including the lidar, but the camera publishes
+nothing. If Gazebo dies at startup with exit code 255, an old gzserver is probably still
+running: `killall -9 gzserver` and launch again.
 
 In Foxglove's 3D panel:
 
@@ -23,17 +31,41 @@ In Foxglove's 3D panel:
 3. Each Gazebo model is a marker namespace under `/world_markers` (`terrain`, `piers`,
    `termite_mud_tubes`, `decoys`, ...), so you can hide parts. The `subfloor` is left out
    on purpose, so you can see in from above.
-4. To see the ground-truth moisture, turn on `/moisture_truth` and set its **Color mode** to
+4. Turn on `/robot_description` for the robot and `/scan` for the lidar hits.
+5. To see the ground-truth moisture, turn on `/moisture_truth` and set its **Color mode** to
    **Costmap** (blue = dry, red = wet). It's drawn 12 cm above the dirt so the bumps don't
    hide it; turn it off again to see the ground.
+
+For the camera, add **Image** panels:
+
+| Topic | What it is |
+|---|---|
+| `/camera/rgb/image_raw/compressed` | Colour camera, JPEG, 10 Hz (about 27 KB a frame) |
+| `/camera/depth/image_raw_throttle` | Depth in metres, 1 Hz. Pixels closer than 0.6 m are blank, as on the real Astra. |
+
+Don't open the raw `/camera/rgb/image_raw`, `/camera/depth/image_raw` or
+`/camera/depth/points` in Foxglove: at about 1 MB or more a frame they swamp rosbridge.
+Nodes on the VM use them directly.
 
 | Launch arg | Default | |
 |---|---|---|
 | `gazebo` | `true` | Start gzserver with the world. `false` shows only the Foxglove markers. |
-| `preview_robot` | `true` | Show the robot standing at the spawn point, for scale. This is visual only; the robot isn't simulated in Gazebo yet. |
-| `spawn_x/y/z/yaw` | `-3.3 0 0.125 0` | Spawn point, just inside the access opening, facing +x. |
+| `robot` | `true` | Spawn the Spiderbot with its sensors. It stands still with its legs in the standing pose until the walking node exists. |
+| `spawn_x/y/z/yaw` | `-3.3 0 0 0` | Where `base_footprint` spawns: on the dirt just inside the access opening, facing +x. |
 
 The ALSA sound errors in the Gazebo output are harmless on a VM without audio.
+
+### Robot sensors
+
+| Topic | Sensor | Details |
+|---|---|---|
+| `/scan` | YDLIDAR G4 (`laser_link`) | 360 deg, 720 beams, 0.12-16 m, 7 Hz, 1 cm noise. Scan plane 19 cm up: sees walls, piers and posts, passes over rocks and under pipes. |
+| `/camera/rgb/image_raw` | Astra-class colour (`camera_optical_frame`) | 640x480, 58 deg wide, 10 Hz |
+| `/camera/depth/image_raw`, `/camera/depth/points` | Astra-class depth | 640x480 metres (32FC1) and point cloud, 0.6-8 m |
+
+Gazebo pauses a camera that has no subscribers, so the first frame after subscribing
+is the last one from before the pause; later frames are live. Nodes that read single
+frames with `rospy.wait_for_message` should skip the first.
 
 ## The world
 

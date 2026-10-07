@@ -1,9 +1,13 @@
 # spiderbot_description
 
 URDF model of the Spiderbot hexapod: an 18-DOF, primitive-geometry stand-in for the
-Hiwonder JetHexa. The model (dimensions, frame names, joint sign conventions) is
-documented at the top of [urdf/spiderbot.urdf.xacro](urdf/spiderbot.urdf.xacro).
-All dimensions are estimates until we have the real robot.
+Hiwonder JetHexa, with the Ultimate kit's lidar and depth camera. The model (dimensions,
+frame names, joint sign conventions) is documented at the top of
+[urdf/spiderbot.urdf.xacro](urdf/spiderbot.urdf.xacro). All dimensions and masses are
+estimates until we have the real robot.
+
+This package is the model only. To run it in Gazebo with working sensors, use
+`spiderbot_gazebo` (see its README).
 
 ## Build
 
@@ -27,12 +31,12 @@ roslaunch rosbridge_server rosbridge_websocket.launch
 
 In Foxglove (connected to `ws://<vm-ip>:9090`), open a **3D** panel and:
 
-1. **Custom layers → + → URDF**, set **Source** to **Topic** and the topic to `/robot_description`.
+1. Under **Topics**, turn on `/robot_description` (eye icon).
 2. Set **Display frame** to `base_link`.
 
-Foxglove can't auto-load the URDF here. It only reads the `robot_description` *parameter*
-over a native ROS connection, not over rosbridge. That's why the launch file also
-republishes it on the latched `/robot_description` topic.
+Foxglove only reads the `robot_description` *parameter* over a native ROS connection, not
+over rosbridge. That's why the launch file also republishes it on the latched
+`/robot_description` topic, which the 3D panel picks up by itself.
 
 ## Moving the joints
 
@@ -61,5 +65,19 @@ rostopic echo -n1 /robot_description | head -c 300
 rosrun tf tf_echo base_link front_left_foot_link
 ```
 
-At the zero pose (sliders centred), every foot sits 0.125 m below `base_link`. For example,
-`front_left_foot_link` is at about (0.185, 0.160, -0.125).
+At the zero pose (sliders centred), every foot sits 0.125 m below `base_link`, on the
+ground plane of `base_footprint`. For example, `front_left_foot_link` is at about
+(0.185, 0.160, -0.125) from `base_link`.
+
+## Sensors and Gazebo settings
+
+| Frame | What it is |
+|---|---|
+| `base_footprint` | Root frame, on the ground under the body |
+| `laser_link` | YDLIDAR G4 scan centre on top of the body, about 19 cm above the ground |
+| `camera_link` | Depth camera on the front edge, x forward, tilted 10 deg down (`camera_tilt` in the xacro) |
+| `camera_optical_frame` | Same point in the optical convention (z forward) that the images use |
+
+[urdf/spiderbot.gazebo.xacro](urdf/spiderbot.gazebo.xacro) holds everything that only
+Gazebo uses: the sensor plugins, Gazebo colours, and kinematic links. Kinematic means
+gravity and contacts never move the robot; the walking node places it each tick instead.

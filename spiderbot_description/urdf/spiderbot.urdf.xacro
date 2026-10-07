@@ -7,8 +7,17 @@
   Replace them with measured values once the real robot is available.
 
   Conventions (REP-103): base_link at the body centre, x forward, y left, z up.
+  base_footprint is the root frame, on the ground directly below base_link when standing.
   Layout: rectangular body, two legs per side (front / middle / rear); front and
   rear legs are splayed 45 deg from the sides.
+
+  Sensors (JetHexa Ultimate kit): laser_link is the lidar's scan centre on top of the
+  body; camera_link is the depth camera on the front edge (x forward, tilted down), and
+  camera_optical_frame is the same point in the optical convention (z forward, x right,
+  y down) that its images use. Gazebo sensor settings are in spiderbot.gazebo.xacro.
+
+  Masses are ESTIMATES (about 2.5 kg in total). Every part has a collision shape and
+  inertia matching its visual, which Gazebo needs.
 
   Per leg, <leg> = front_left | middle_left | rear_left | front_right | middle_right | rear_right:
     links:  <leg>_coxa_link -> <leg>_femur_link -> <leg>_tibia_link -> <leg>_foot_link
@@ -41,24 +50,111 @@
   <xacro:property name="joint_effort" value="3.0"/>
   <xacro:property name="joint_velocity" value="5.0"/>
 
+  <!-- Masses in kg (ESTIMATE). The body includes the Jetson, battery and electronics;
+       each leg segment includes its servo. -->
+  <xacro:property name="body_mass" value="1.2"/>
+  <xacro:property name="coxa_mass" value="0.06"/>
+  <xacro:property name="femur_mass" value="0.08"/>
+  <xacro:property name="tibia_mass" value="0.04"/>
+
+  <!-- Sensor mounts (ESTIMATE). The lidar's scan plane ends up about 19 cm above the dirt.
+       The camera is tilted down so it sees the ground ahead as well as walls and piers. -->
+  <xacro:property name="lidar_xyz" value="-0.02 0 0.065"/>
+  <xacro:property name="camera_xyz" value="${body_length/2 + 0.0125} 0 ${body_height/2 + 0.0125}"/>
+  <xacro:property name="camera_tilt" value="${10*pi/180}"/>
+
   <material name="body"><color rgba="0.25 0.25 0.25 1"/></material>
   <material name="heading"><color rgba="0.85 0.1 0.1 1"/></material>
   <material name="coxa"><color rgba="0.95 0.55 0.1 1"/></material>
   <material name="femur"><color rgba="0.75 0.75 0.75 1"/></material>
   <material name="tibia"><color rgba="0.15 0.4 0.85 1"/></material>
+  <material name="sensor"><color rgba="0.1 0.1 0.1 1"/></material>
+
+  <!-- A part's visual plus a matching collision shape and solid-body inertia, centred at xyz -->
+  <xacro:macro name="box_part" params="x y z xyz mass material">
+    <visual>
+      <origin xyz="${xyz}"/>
+      <geometry><box size="${x} ${y} ${z}"/></geometry>
+      <material name="${material}"/>
+    </visual>
+    <collision>
+      <origin xyz="${xyz}"/>
+      <geometry><box size="${x} ${y} ${z}"/></geometry>
+    </collision>
+    <inertial>
+      <origin xyz="${xyz}"/>
+      <mass value="${mass}"/>
+      <inertia ixx="${mass*(y*y + z*z)/12}" ixy="0" ixz="0"
+               iyy="${mass*(x*x + z*z)/12}" iyz="0" izz="${mass*(x*x + y*y)/12}"/>
+    </inertial>
+  </xacro:macro>
+
+  <xacro:macro name="cylinder_part" params="radius length xyz mass material">
+    <visual>
+      <origin xyz="${xyz}"/>
+      <geometry><cylinder radius="${radius}" length="${length}"/></geometry>
+      <material name="${material}"/>
+    </visual>
+    <collision>
+      <origin xyz="${xyz}"/>
+      <geometry><cylinder radius="${radius}" length="${length}"/></geometry>
+    </collision>
+    <inertial>
+      <origin xyz="${xyz}"/>
+      <mass value="${mass}"/>
+      <inertia ixx="${mass*(3*radius*radius + length*length)/12}" ixy="0" ixz="0"
+               iyy="${mass*(3*radius*radius + length*length)/12}" iyz="0" izz="${mass*radius*radius/2}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- Massless root on the ground, so KDL doesn't warn about a root link with inertia -->
+  <link name="base_footprint"/>
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${tibia_length}"/>
+  </joint>
 
   <link name="base_link">
-    <visual>
-      <geometry><box size="${body_length} ${body_width} ${body_height}"/></geometry>
-      <material name="body"/>
-    </visual>
-    <!-- Heading marker on the front edge (where JetHexa's camera sits) -->
+    <xacro:box_part x="${body_length}" y="${body_width}" z="${body_height}" xyz="0 0 0"
+                    mass="${body_mass}" material="body"/>
+    <!-- Heading marker on the front edge, just behind the camera -->
     <visual>
       <origin xyz="${body_length/2 - 0.01} 0 ${body_height/2 + 0.01}"/>
       <geometry><box size="0.02 0.06 0.02"/></geometry>
       <material name="heading"/>
     </visual>
   </link>
+
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="laser_link"/>
+    <origin xyz="${lidar_xyz}"/>
+  </joint>
+  <link name="laser_link">
+    <xacro:cylinder_part radius="0.035" length="0.03" xyz="0 0 0" mass="0.15" material="sensor"/>
+    <!-- Stand between the body and the lidar puck -->
+    <visual>
+      <origin xyz="0 0 -0.0275"/>
+      <geometry><cylinder radius="0.02" length="0.025"/></geometry>
+      <material name="sensor"/>
+    </visual>
+  </link>
+
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="${camera_xyz}" rpy="0 ${camera_tilt} 0"/>
+  </joint>
+  <link name="camera_link">
+    <xacro:box_part x="0.025" y="0.09" z="0.025" xyz="0 0 0" mass="0.1" material="sensor"/>
+  </link>
+  <joint name="camera_optical_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="camera_optical_frame"/>
+    <origin rpy="${-pi/2} 0 ${-pi/2}"/>
+  </joint>
+  <link name="camera_optical_frame"/>
 
   <!-- One 3-DOF leg mounted on base_link at (x, y), with its local x axis rotated
        by yaw so that it points away from the body. -->
@@ -71,11 +167,8 @@
       <limit lower="${-coxa_limit}" upper="${coxa_limit}" effort="${joint_effort}" velocity="${joint_velocity}"/>
     </joint>
     <link name="${prefix}_coxa_link">
-      <visual>
-        <origin xyz="${coxa_length/2} 0 0"/>
-        <geometry><box size="${coxa_length} 0.03 0.025"/></geometry>
-        <material name="coxa"/>
-      </visual>
+      <xacro:box_part x="${coxa_length}" y="0.03" z="0.025" xyz="${coxa_length/2} 0 0"
+                      mass="${coxa_mass}" material="coxa"/>
     </link>
 
     <joint name="${prefix}_femur_joint" type="revolute">
@@ -86,11 +179,8 @@
       <limit lower="${-femur_limit}" upper="${femur_limit}" effort="${joint_effort}" velocity="${joint_velocity}"/>
     </joint>
     <link name="${prefix}_femur_link">
-      <visual>
-        <origin xyz="${femur_length/2} 0 0"/>
-        <geometry><box size="${femur_length} 0.02 0.02"/></geometry>
-        <material name="femur"/>
-      </visual>
+      <xacro:box_part x="${femur_length}" y="0.02" z="0.02" xyz="${femur_length/2} 0 0"
+                      mass="${femur_mass}" material="femur"/>
     </link>
 
     <joint name="${prefix}_tibia_joint" type="revolute">
@@ -101,12 +191,9 @@
       <limit lower="${-tibia_limit}" upper="${tibia_limit}" effort="${joint_effort}" velocity="${joint_velocity}"/>
     </joint>
     <link name="${prefix}_tibia_link">
-      <visual>
-        <!-- Cylinders are aligned with z, so this hangs straight down at zero -->
-        <origin xyz="0 0 ${-tibia_length/2}"/>
-        <geometry><cylinder radius="0.008" length="${tibia_length}"/></geometry>
-        <material name="tibia"/>
-      </visual>
+      <!-- Cylinders are aligned with z, so this hangs straight down at zero -->
+      <xacro:cylinder_part radius="0.008" length="${tibia_length}" xyz="0 0 ${-tibia_length/2}"
+                           mass="${tibia_mass}" material="tibia"/>
     </link>
 
     <joint name="${prefix}_foot_joint" type="fixed">
@@ -115,7 +202,11 @@
       <origin xyz="0 0 ${-tibia_length}"/>
     </joint>
     <link name="${prefix}_foot_link"/>
+
+    <xacro:leg_gazebo prefix="${prefix}"/>
   </xacro:macro>
+
+  <xacro:include filename="$(find spiderbot_description)/urdf/spiderbot.gazebo.xacro"/>
 
   <xacro:leg prefix="front_left"   x="${body_length/2}"  y="${body_width/2}"  yaw="${pi/4}"/>
   <xacro:leg prefix="middle_left"  x="0"                 y="${body_width/2}"  yaw="${pi/2}"/>

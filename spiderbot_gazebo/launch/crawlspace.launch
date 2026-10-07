@@ -1,17 +1,19 @@
 <launch>
-  <!-- Crawlspace world in Gazebo, mirrored into Foxglove on /world_markers.
-       Run rosbridge separately to view it in Foxglove. -->
+  <!-- Crawlspace world in Gazebo with the Spiderbot standing at the spawn point, mirrored
+       into Foxglove. Run rosbridge separately to view it.
+       The robot's camera needs an X display, so on the headless VM run this under Xvfb:
+         xvfb-run -a -s "-screen 0 1280x1024x24" roslaunch spiderbot_gazebo crawlspace.launch
+       Without a display Gazebo still runs and the lidar works, but there are no camera images. -->
   <arg name="world" default="$(find spiderbot_gazebo)/worlds/crawlspace.world"/>
   <!-- Gazebo runs headless (gzserver only); its GUI can't open on the VM -->
   <arg name="gazebo" default="true"/>
-  <!-- Show the robot model standing at the spawn point for scale. Visual only:
-       the robot isn't simulated in Gazebo yet. -->
-  <arg name="preview_robot" default="true"/>
-  <!-- Spawn point: just inside the access opening, facing into the crawlspace.
-       Keep in sync with SPAWN in scripts/generate_crawlspace.py (terrain is flat there). -->
+  <arg name="robot" default="true"/>
+  <!-- Spawn point for base_footprint: on the dirt just inside the access opening, facing
+       into the crawlspace. Keep in sync with SPAWN in scripts/generate_crawlspace.py
+       (the terrain is flat there). -->
   <arg name="spawn_x" default="-3.3"/>
   <arg name="spawn_y" default="0.0"/>
-  <arg name="spawn_z" default="0.125"/>
+  <arg name="spawn_z" default="0.0"/>
   <arg name="spawn_yaw" default="0.0"/>
 
   <include if="$(arg gazebo)" file="$(find gazebo_ros)/launch/empty_world.launch">
@@ -38,9 +40,22 @@
   <node name="moisture_map_tf" pkg="tf2_ros" type="static_transform_publisher"
         args="0 0 0.12 0 0 0 world moisture_map"/>
 
-  <group if="$(arg preview_robot)">
-    <include file="$(find spiderbot_description)/launch/display.launch"/>
-    <node name="robot_preview_tf" pkg="tf2_ros" type="static_transform_publisher"
-          args="$(arg spawn_x) $(arg spawn_y) $(arg spawn_z) $(arg spawn_yaw) 0 0 world base_link"/>
+  <group if="$(arg robot)">
+    <param name="robot_description"
+           command="$(find xacro)/xacro '$(find spiderbot_description)/urdf/spiderbot.urdf.xacro'"/>
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"/>
+    <node name="robot_description_publisher" pkg="spiderbot_description" type="robot_description_publisher.py"/>
+    <!-- Legs held at the standing pose, matching the static model in Gazebo -->
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher"/>
+    <node if="$(arg gazebo)" name="spawn_spiderbot" pkg="gazebo_ros" type="spawn_model"
+          args="-urdf -param robot_description -model spiderbot
+                -x $(arg spawn_x) -y $(arg spawn_y) -z $(arg spawn_z) -Y $(arg spawn_yaw)"/>
+    <!-- Where the robot is. Fixed for now; the walking node will publish this as it moves. -->
+    <node name="robot_pose_tf" pkg="tf2_ros" type="static_transform_publisher"
+          args="$(arg spawn_x) $(arg spawn_y) $(arg spawn_z) $(arg spawn_yaw) 0 0 world base_footprint"/>
+    <!-- Raw depth images (~1.2 MB each) are too big to stream over rosbridge, so Foxglove
+         gets this 1 Hz copy. The colour image streams as /camera/rgb/image_raw/compressed. -->
+    <node name="depth_throttle" pkg="topic_tools" type="throttle"
+          args="messages camera/depth/image_raw 1.0 camera/depth/image_raw_throttle"/>
   </group>
 </launch>
