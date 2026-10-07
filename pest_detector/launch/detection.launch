@@ -1,0 +1,12 @@
+<launch>
+  <!-- Pest detection: find signs in the camera (pest_detector_node), confirm and rate them
+       on the SLAM map with the measured moisture, and write reports (sign_mapper).
+       Needs the camera, depth, TF to the map frame and, for risk ratings, /moisture_map.
+       ground_truth: the simulated world's answer key, to score runs in the report (optional). -->
+  <arg name="ground_truth" default=""/>
+
+  <node name="pest_detector" pkg="pest_detector" type="pest_detector_node.py" output="screen"/>
+  <node name="sign_mapper" pkg="pest_detector" type="sign_mapper.py" output="screen">
+    <param name="ground_truth" value="$(arg ground_truth)"/>
+  </node>
+</launch>

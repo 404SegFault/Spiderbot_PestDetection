@@ -51,6 +51,8 @@
          display: flex; align-items: center; justify-content: center; }
   #cam img { width: 100%; height: 100%; object-fit: contain; display: none; }
   #cam span { color: var(--muted); }
+  #cam #viewlabel { position: absolute; left: 8px; bottom: 8px; padding: 3px 9px; border-radius: 999px;
+                    background: rgba(0, 0, 0, 0.6); color: var(--text); font-size: 12px; }
 
   button {
     font: inherit; color: var(--text); background: var(--button); border: 0; border-radius: 14px;
@@ -79,11 +81,12 @@
     <h1>Spiderbot</h1>
     <span id="status" class="pill warn">connecting…</span>
     <span id="moisture" class="pill">moisture –</span>
+    <span id="signs" class="pill">signs –</span>
     <span id="notice" class="pill" hidden></span>
     <span id="readout">stopped</span>
   </header>
 
-  <div id="cam"><img id="frame" alt="robot camera"><span id="nocam">waiting for camera…</span></div>
+  <div id="cam"><img id="frame" alt="robot camera"><span id="nocam">waiting for camera…</span><span id="viewlabel"></span></div>
 
   <div id="pad">
     <button data-key="fwd" aria-label="Forward">▲</button>
@@ -96,7 +99,7 @@
     <button data-key="sideleft" aria-label="Sidestep left">◀<small>side</small></button>
     <button data-key="sideright" aria-label="Sidestep right">▶<small>side</small></button>
     <button id="speed">Speed: slow</button>
-    <button id="save">Save maps</button>
+    <button id="save">Save report</button>
     <button id="stop">STOP</button>
   </div>
 
@@ -106,9 +109,12 @@
 // compressed camera. Rosbridge is assumed to be on this page's host, port 9090; override
 // with ?bridge=ws://host:port.
 const CMD_TOPIC = "/cmd_vel";
-const CAMERA_TOPIC = "/camera/rgb/image_raw/compressed";
+// Camera views: the detector's annotated frames, or the plain camera (tap the picture to switch)
+const VIEWS = { detections: "/pest_detection/image/compressed", camera: "/camera/rgb/image_raw/compressed" };
 const MOISTURE_TOPIC = "/moisture";
-const SAVE_SERVICE = "/save_maps";
+const SIGNS_TOPIC = "/pest_detection/signs";
+const REPORT_SERVICE = "/pest_detection/save_report";  // saves the maps too
+const SAVE_MAPS_SERVICE = "/save_maps";  // fallback when detection isn't running
 const SPEEDS = { slow: { linear: 0.06, angular: 0.3 }, fast: { linear: 0.15, angular: 0.6 } };
 const KEYS = { ArrowUp: "fwd", w: "fwd", ArrowDown: "back", s: "back", ArrowLeft: "left", a: "left",
                ArrowRight: "right", d: "right", q: "sideleft", e: "sideright" };
@@ -116,6 +122,9 @@ const KEYS = { ArrowUp: "fwd", w: "fwd", ArrowDown: "back", s: "back", ArrowLeft
 const bridgeUrl = new URLSearchParams(location.search).get("bridge") || `ws://${location.hostname || "localhost"}:9090`;
 const held = new Set();
 let speed = "slow";
+let view = "detections";
+let viewSince = 0;
+let lastFrame = 0;
 let ws = null;
 let stopRepeats = 0;
 
@@ -130,21 +139,32 @@ function connect() {
   ws.onopen = () => {
     setStatus("connected", "ok");
     send({ op: "advertise", topic: CMD_TOPIC, type: "geometry_msgs/Twist" });
-    send({ op: "subscribe", topic: CAMERA_TOPIC, type: "sensor_msgs/CompressedImage", throttle_rate: 150, queue_length: 1 });
+    showView(view);
     send({ op: "subscribe", topic: MOISTURE_TOPIC, type: "sensor_msgs/RelativeHumidity", throttle_rate: 500, queue_length: 1 });
+    send({ op: "subscribe", topic: SIGNS_TOPIC, type: "visualization_msgs/MarkerArray", throttle_rate: 1000, queue_length: 1 });
   };
   ws.onmessage = (event) => {
     const message = JSON.parse(event.data);
-    if (message.topic === CAMERA_TOPIC) {
+    if (message.topic === VIEWS[view]) {
+      lastFrame = Date.now();
       $("frame").src = "data:image/jpeg;base64," + message.msg.data;
       $("frame").style.display = "block";
       $("nocam").style.display = "none";
     } else if (message.topic === MOISTURE_TOPIC) {
       $("moisture").textContent = "moisture " + Math.round(message.msg.relative_humidity * 100);
-    } else if (message.op === "service_response" && message.service === SAVE_SERVICE) {
+    } else if (message.topic === SIGNS_TOPIC) {
+      const signs = message.msg.markers.filter((m) => m.ns === "sign");
+      const high = message.msg.markers.filter((m) => m.ns === "label" && m.text.includes("| HIGH |")).length;
+      $("signs").textContent = `signs ${signs.length}` + (high ? ` (${high} high)` : "");
+    } else if (message.op === "service_response") {
       const ok = message.result && message.values.success;
-      // The full message names the folder on the VM; the phone shows just the folder name
-      notify(ok ? "Saved maps: " + message.values.message.split("/").pop() : "Save failed (is mapping running?)", ok);
+      if (message.service === REPORT_SERVICE && !ok) {
+        send({ op: "call_service", id: "save-" + Date.now(), service: SAVE_MAPS_SERVICE, args: {} });
+      } else {
+        // The full message names the folder on the VM; the phone shows just the folder name
+        const what = message.service === REPORT_SERVICE ? "report + maps" : "maps";
+        notify(ok ? `Saved ${what}: ` + message.values.message.split("/").pop() : "Save failed (is mapping running?)", ok);
+      }
     }
   };
   ws.onclose = () => {
@@ -161,6 +181,22 @@ function notify(text, ok) {
   clearTimeout(notify.timer);
   notify.timer = setTimeout(() => { notice.hidden = true; }, 8000);
 }
+
+function showView(name) {
+  if (view !== name) send({ op: "unsubscribe", topic: VIEWS[view] });
+  view = name;
+  viewSince = Date.now();
+  send({ op: "subscribe", topic: VIEWS[view], type: "sensor_msgs/CompressedImage", throttle_rate: 150, queue_length: 1 });
+  $("viewlabel").textContent = name === "detections" ? "detections · tap for plain camera" : "camera · tap for detections";
+}
+
+// Fall back to the plain camera if the detector isn't sending anything
+setInterval(() => {
+  if (view === "detections" && Date.now() - viewSince > 8000 && lastFrame < viewSince) {
+    showView("camera");
+    notify("No detector frames: showing the plain camera", false);
+  }
+}, 1000);
 
 function setStatus(text, kind) {
   $("status").textContent = text;
@@ -209,9 +245,10 @@ document.querySelectorAll("button[data-key]").forEach((button) => {
 });
 $("stop").addEventListener("pointerdown", (e) => { e.preventDefault(); stopAll(); });
 $("save").addEventListener("click", () => {
-  send({ op: "call_service", id: "save-" + Date.now(), service: SAVE_SERVICE, args: {} });
-  notify("Saving maps…", true);
+  send({ op: "call_service", id: "save-" + Date.now(), service: REPORT_SERVICE, args: {} });
+  notify("Saving…", true);
 });
+$("cam").addEventListener("click", () => showView(view === "detections" ? "camera" : "detections"));
 $("speed").addEventListener("click", () => {
   speed = speed === "slow" ? "fast" : "slow";
   $("speed").textContent = "Speed: " + speed;

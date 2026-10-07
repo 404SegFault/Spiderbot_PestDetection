@@ -2,7 +2,7 @@
 <package format="2">
   <name>pest_detector</name>
   <version>0.0.0</version>
-  <description>The pest_detector package</description>
+  <description>Pest-sign detection for the Spiderbot: finds signs in the camera, locates them on the SLAM map, rates them with soil moisture and writes inspection reports.</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
@@ -61,6 +61,15 @@
   <exec_depend>rospy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>vision_msgs</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>message_filters</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>python-numpy</exec_depend>
+  <exec_depend>python-yaml</exec_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

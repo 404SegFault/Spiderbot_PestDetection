@@ -10,6 +10,8 @@
   <arg name="robot" default="true"/>
   <!-- SLAM floor plan + moisture map while you drive (spiderbot_mapping) -->
   <arg name="mapping" default="true"/>
+  <!-- Find pest signs in the camera and report them on the map (pest_detector); needs mapping -->
+  <arg name="detection" default="true"/>
   <!-- Spawn point for base_footprint: on the dirt just inside the access opening, facing
        into the crawlspace. Keep in sync with SPAWN in scripts/generate_crawlspace.py
        (the terrain is flat there). -->
@@ -78,6 +80,11 @@
     </group>
     <node unless="$(arg mapping)" name="odom_origin_tf" pkg="tf2_ros" type="static_transform_publisher"
           args="$(arg spawn_x) $(arg spawn_y) 0 $(arg spawn_yaw) 0 0 world odom"/>
+
+    <!-- The answer key lets the inspection report score itself against the simulated world -->
+    <include if="$(arg detection)" file="$(find pest_detector)/launch/detection.launch">
+      <arg name="ground_truth" value="$(find spiderbot_gazebo)/worlds/crawlspace_ground_truth.yaml"/>
+    </include>
     <!-- Raw depth images (~1.2 MB each) are too big to stream over rosbridge, so Foxglove
          gets this 1 Hz copy. The colour image streams as /camera/rgb/image_raw/compressed.
          Lazy: it only subscribes while someone views the output, because Gazebo renders

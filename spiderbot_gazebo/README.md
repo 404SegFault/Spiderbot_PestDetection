@@ -52,6 +52,7 @@ Nodes on the VM use them directly.
 | `gazebo` | `true` | Start gzserver with the world. `false` shows only the Foxglove markers. |
 | `robot` | `true` | Spawn the Spiderbot with its sensors, driven by `sim_walker.py` (below). |
 | `mapping` | `true` | Build the floor plan and moisture map while driving (`spiderbot_mapping`). |
+| `detection` | `true` | Find pest signs and write reports scored against the world's answer key (`pest_detector`). |
 | `spawn_x/y/z/yaw` | `-3.3 0 0 0` | Where `base_footprint` spawns: on the dirt just inside the access opening, facing +x. |
 
 The ALSA sound errors in the Gazebo output are harmless on a VM without audio.

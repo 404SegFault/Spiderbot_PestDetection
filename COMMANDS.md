@@ -77,6 +77,7 @@ Add these to the `roslaunch spiderbot_gazebo crawlspace.launch` line:
 | `gazebo:=false` | Skip Gazebo; Foxglove still shows the world markers, moisture map and robot model. No sensors. Doesn't need `xvfb-run`. |
 | `robot:=false` | World only, no robot. |
 | `mapping:=false` | Don't build maps (no gmapping or moisture mapper). Mapping needs Gazebo's lidar, so it does nothing with `gazebo:=false`. |
+| `detection:=false` | Don't run pest detection. Detection needs mapping (it places signs on the map). |
 | `spawn_x:=... spawn_y:=... spawn_yaw:=...` | Start the robot somewhere else (default `-3.3 0 0`, by the access opening). |
 
 ### Robot model on its own (no Gazebo)
@@ -116,22 +117,40 @@ prints `<mac-ip>`. Allow incoming connections if macOS asks.
 WASD, Q/E to sidestep, Space to stop). Or use Foxglove's **Teleop** panel on topic `/cmd_vel`
 with its publish rate set to 10 Hz; at lower rates the robot stops between messages.
 
-## 5. Build and save maps
+## 5. Inspect: maps, moisture and pest signs
 
-Mapping runs automatically with the simulation. Just drive around: gmapping builds the
-floor plan from the lidar, and the moisture probe under the robot's nose fills in a moisture
-map along the way. Drive slowly through the areas you care about, and turn gently; fast
-spins make the floor plan smear.
+Mapping and pest detection run automatically with the simulation. Drive around and:
 
-To save both maps, tap **Save maps** on the phone page, or run:
+- **gmapping** builds the floor plan from the lidar;
+- the **moisture probe** under the robot's nose fills in a moisture map where it walks;
+- the **detector** looks for termite mud tubes, rodent droppings and burrows in the camera.
+  A sign is confirmed (and appears on the map) once it's been seen 3 times.
+
+Tips for a good inspection run:
+
+- **Drive slowly and turn gently.** Fast spins smear the floor plan.
+- **Stop and look.** Face walls and piers from about 1-1.5 m for termite tubes, and the dirt
+  1 m or less ahead for droppings and burrows.
+- **Walk the probe up to what you find.** A termite tube's risk depends on the soil moisture
+  right next to it; until the probe has been within 0.6 m, the report says "not measured".
+
+The phone page's camera shows the detections boxed (tap the picture for the plain camera),
+and the header counts confirmed signs.
+
+**Save the report:** tap **Save report** on the phone page, or run:
 
 ```bash
-rosservice call /save_maps
+rosservice call /pest_detection/save_report
 ```
 
-Each save makes a new folder `~/spiderbot_maps/<date>_<time>/` on the VM with `map.pgm/.yaml`
-(floor plan) and `moisture.pgm/.yaml` (moisture map), in map_server format. To copy them to
-the Mac, run this on the Mac: `scp -r <user>@<vm-ip>:spiderbot_maps ~/Desktop/`
+Each save makes a new folder `~/spiderbot_maps/<date>_<time>/` on the VM containing:
+- `report.md`: findings with risk ratings, a moisture summary, and in simulation a score
+  against the world's answer key;
+- `signs.json`;
+- the floor plan and moisture map, as `map.pgm/.yaml` and `moisture.pgm/.yaml`.
+
+`rosservice call /save_maps` saves just the maps. To copy everything to the Mac, run this on
+the Mac: `scp -r <user>@<vm-ip>:spiderbot_maps ~/Desktop/`
 
 ## 6. View in Foxglove (Mac)
 
@@ -148,10 +167,13 @@ the Mac, run this on the Mac: `scp -r <user>@<vm-ip>:spiderbot_maps ~/Desktop/`
        red = wet; unmeasured areas are transparent).
      - `/moisture_truth` (optional): the ground-truth moisture (answer key), same colours.
        Turn it off to see the measured map.
+     - `/pest_detection/signs`: confirmed pest signs: a disc (red = high risk, orange =
+       medium) with a label naming the sign, its risk and the soil moisture.
    - **Transforms:** switch **Labels** off to hide frame names; switch **Enable
      preloading** off to avoid the "At most ... transforms" error on long sessions.
 3. Add **Image** panels:
-   - `/camera/rgb/image_raw/compressed`: the robot's colour camera.
+   - `/pest_detection/image/compressed`: the camera with detections boxed.
+   - `/camera/rgb/image_raw/compressed`: the plain colour camera.
    - `/camera/depth/image_raw_throttle`: depth, once a second.
 
 Don't open `/camera/rgb/image_raw`, `/camera/depth/image_raw` or `/camera/depth/points`
@@ -186,6 +208,10 @@ gz stats                                   # Gazebo speed: Factor near 1.00 mean
 | `/moisture` | Moisture probe readings (`relative_humidity` 0.01 dry to 0.98 saturated), 5 Hz |
 | `/moisture_map` | Measured moisture map: 1 (dry) to 98 (saturated), 0 = not measured |
 | `/save_maps` (service) | Save the floor plan and moisture map to `~/spiderbot_maps/` |
+| `/pest_detection/image/compressed` | Camera view with detections boxed, about 3 Hz |
+| `/pest_detection/detections` | Per-frame detections (`vision_msgs/Detection2DArray`) |
+| `/pest_detection/signs` | Confirmed pest signs on the map (markers) |
+| `/pest_detection/save_report` (service) | Save the maps plus `report.md` and `signs.json` |
 | `/joint_states` | Leg joint angles (walking animation) |
 | `/tf`, `/tf_static` | Coordinate frames: `world -> map -> odom -> base_footprint -> base_link -> ...` (`map -> odom` comes from SLAM; `world` is the simulator's frame, fixed to where the robot started) |
 | `/scan` | Lidar, 360 deg, 7 Hz |
@@ -219,6 +245,8 @@ rosclean purge -y     # deletes old ROS logs; run when it warns the log folder i
 | Phone page says "no connection to ws://...:9090" | Session 2 must be `web_teleop.launch` and still running. If the phone can't reach the VM, use the port forwarding in section 4. |
 | Camera view takes a while to appear | Normal the first time after launching (5-10 s while Gazebo sets up rendering). |
 | No `/map`, or the moisture map stays empty | Mapping needs the lidar, so Gazebo must be running (not `gazebo:=false`). The floor plan appears after the robot has moved about 10 cm. |
+| No pest signs appear | Detection needs mapping running (it places signs on the map). Get within about 1.5 m and face the sign; it takes 3 sightings (about a second) to confirm. |
+| A termite tube is only MEDIUM risk / moisture "not measured" | Walk the robot up to it (within 0.6 m) so the probe can measure the soil there; the rating updates. |
 | Floor plan has doubled or smeared walls | You turned too fast for the scan matching. Drive more slowly; the map usually cleans up as you revisit an area. |
 | Camera or robot motion very slow or frozen | Check Gazebo's speed with `gz stats` (Factor should be near 1.00). If it's far lower, something is starving the VM's CPU; restart the simulation. |
 | The first camera frame you grab looks out of date | Normal: Gazebo pauses cameras with no subscribers, so the first frame after subscribing is old. Later frames are live. |
