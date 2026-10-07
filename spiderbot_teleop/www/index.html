@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="data:,">
+<meta name="theme-color" content="#111418">
+<title>Spiderbot Teleop</title>
+<style>
+  :root {
+    --bg: #111418;
+    --panel: #1b2027;
+    --button: #2a313b;
+    --button-pressed: #3d7bd9;
+    --text: #e8ecf1;
+    --muted: #8a94a3;
+    --stop: #d93d3d;
+    --ok: #3dbd6b;
+    --warn: #d9a23d;
+    /* Button sizes shrink with the screen so both control groups fit side by side in portrait */
+    --cell: min(68px, 15.5vw);
+    --side: min(76px, 19vw);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: grid; gap: 10px;
+    padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: auto 1fr;
+    grid-template-areas: "top top top" "pad cam btn";
+    user-select: none; -webkit-user-select: none; touch-action: none; overflow: hidden;
+  }
+  @media (orientation: portrait) {
+    body { grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr auto;
+           grid-template-areas: "top top" "cam cam" "pad btn"; }
+  }
+  header { grid-area: top; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0 6px 0 0; }
+  .pill { padding: 3px 10px; border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 13px; }
+  .pill.ok { color: var(--ok); }
+  .pill.warn { color: var(--warn); }
+  #readout { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+
+  #cam { grid-area: cam; background: #000; border-radius: 12px; overflow: hidden; position: relative; min-height: 0;
+         display: flex; align-items: center; justify-content: center; }
+  #cam img { width: 100%; height: 100%; object-fit: contain; display: none; }
+  #cam span { color: var(--muted); }
+
+  button {
+    font: inherit; color: var(--text); background: var(--button); border: 0; border-radius: 14px;
+    min-width: 0; min-height: 52px; font-size: 24px; touch-action: none;
+  }
+  button.held { background: var(--button-pressed); }
+  button small { display: block; font-size: 12px; color: var(--muted); }
+  button.held small { color: var(--text); }
+
+  #pad { grid-area: pad; display: grid; grid-template-columns: repeat(3, var(--cell)); grid-template-rows: repeat(3, var(--cell));
+         gap: 6px; align-self: center; justify-self: start; }
+  #pad [data-key="fwd"] { grid-area: 1 / 2; }
+  #pad [data-key="left"] { grid-area: 2 / 1; }
+  #pad [data-key="right"] { grid-area: 2 / 3; }
+  #pad [data-key="back"] { grid-area: 3 / 2; }
+
+  #buttons { grid-area: btn; display: grid; grid-template-columns: var(--side) var(--side); gap: 8px; align-self: center; justify-self: end; }
+  #buttons [data-key] { min-height: var(--cell); }
+  #buttons button { font-size: 18px; }
+  #speed { grid-column: 1 / 3; min-height: 52px; font-size: 16px; }
+  #stop { grid-column: 1 / 3; min-height: 72px; background: var(--stop); font-size: 20px; font-weight: 700; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Spiderbot</h1>
+    <span id="status" class="pill warn">connecting…</span>
+    <span id="readout">stopped</span>
+  </header>
+
+  <div id="cam"><img id="frame" alt="robot camera"><span id="nocam">waiting for camera…</span></div>
+
+  <div id="pad">
+    <button data-key="fwd" aria-label="Forward">▲</button>
+    <button data-key="left" aria-label="Turn left">⟲</button>
+    <button data-key="right" aria-label="Turn right">⟳</button>
+    <button data-key="back" aria-label="Back">▼</button>
+  </div>
+
+  <div id="buttons">
+    <button data-key="sideleft" aria-label="Sidestep left">◀<small>side</small></button>
+    <button data-key="sideright" aria-label="Sidestep right">▶<small>side</small></button>
+    <button id="speed">Speed: slow</button>
+    <button id="stop">STOP</button>
+  </div>
+
+<script>
+// Talks to rosbridge directly (plain JSON over a WebSocket, no library): publishes
+// geometry_msgs/Twist on /cmd_vel while a movement button is held, and shows the robot's
+// compressed camera. Rosbridge is assumed to be on this page's host, port 9090; override
+// with ?bridge=ws://host:port.
+const CMD_TOPIC = "/cmd_vel";
+const CAMERA_TOPIC = "/camera/rgb/image_raw/compressed";
+const SPEEDS = { slow: { linear: 0.06, angular: 0.3 }, fast: { linear: 0.15, angular: 0.6 } };
+const KEYS = { ArrowUp: "fwd", w: "fwd", ArrowDown: "back", s: "back", ArrowLeft: "left", a: "left",
+               ArrowRight: "right", d: "right", q: "sideleft", e: "sideright" };
+
+const bridgeUrl = new URLSearchParams(location.search).get("bridge") || `ws://${location.hostname || "localhost"}:9090`;
+const held = new Set();
+let speed = "slow";
+let ws = null;
+let stopRepeats = 0;
+
+const $ = (id) => document.getElementById(id);
+
+function send(message) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+}
+
+function connect() {
+  ws = new WebSocket(bridgeUrl);
+  ws.onopen = () => {
+    setStatus("connected", "ok");
+    send({ op: "advertise", topic: CMD_TOPIC, type: "geometry_msgs/Twist" });
+    send({ op: "subscribe", topic: CAMERA_TOPIC, type: "sensor_msgs/CompressedImage", throttle_rate: 150, queue_length: 1 });
+  };
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.topic === CAMERA_TOPIC) {
+      $("frame").src = "data:image/jpeg;base64," + message.msg.data;
+      $("frame").style.display = "block";
+      $("nocam").style.display = "none";
+    }
+  };
+  ws.onclose = () => {
+    setStatus(`no connection to ${bridgeUrl}, retrying`, "warn");
+    setTimeout(connect, 2000);
+  };
+}
+
+function setStatus(text, kind) {
+  $("status").textContent = text;
+  $("status").className = "pill " + kind;
+}
+
+function twist() {
+  const s = SPEEDS[speed];
+  const axis = (plus, minus) => (held.has(plus) ? 1 : 0) - (held.has(minus) ? 1 : 0);
+  return {
+    linear: { x: axis("fwd", "back") * s.linear, y: axis("sideleft", "sideright") * s.linear, z: 0 },
+    angular: { x: 0, y: 0, z: axis("left", "right") * s.angular },
+  };
+}
+
+// Publish at 10 Hz while anything is held. The robot stops by itself if commands stop
+// arriving (lost connection, phone locked), and a few zero commands follow every release.
+setInterval(() => {
+  const t = twist();
+  if (held.size > 0) {
+    send({ op: "publish", topic: CMD_TOPIC, msg: t });
+    stopRepeats = 3;
+  } else if (stopRepeats > 0) {
+    send({ op: "publish", topic: CMD_TOPIC, msg: t });
+    stopRepeats--;
+  }
+  const moving = t.linear.x || t.linear.y || t.angular.z;
+  $("readout").textContent = moving
+    ? `fwd ${t.linear.x.toFixed(2)}  side ${t.linear.y.toFixed(2)} m/s  turn ${t.angular.z.toFixed(2)} rad/s`
+    : "stopped";
+}, 100);
+
+function press(key, button) { held.add(key); if (button) button.classList.add("held"); }
+function release(key, button) { held.delete(key); if (button) button.classList.remove("held"); }
+function stopAll() {
+  held.clear();
+  document.querySelectorAll("button.held").forEach((b) => b.classList.remove("held"));
+  stopRepeats = 3;
+}
+
+document.querySelectorAll("button[data-key]").forEach((button) => {
+  const key = button.dataset.key;
+  button.addEventListener("pointerdown", (e) => { e.preventDefault(); button.setPointerCapture(e.pointerId); press(key, button); });
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach((type) =>
+    button.addEventListener(type, () => release(key, button)));
+});
+$("stop").addEventListener("pointerdown", (e) => { e.preventDefault(); stopAll(); });
+$("speed").addEventListener("click", () => {
+  speed = speed === "slow" ? "fast" : "slow";
+  $("speed").textContent = "Speed: " + speed;
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === " ") { stopAll(); return; }
+  if (e.key === "f") { $("speed").click(); return; }
+  const key = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+  if (key) { e.preventDefault(); press(key, document.querySelector(`[data-key="${key}"]`)); }
+});
+document.addEventListener("keyup", (e) => {
+  const key = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+  if (key) release(key, document.querySelector(`[data-key="${key}"]`));
+});
+document.addEventListener("contextmenu", (e) => e.preventDefault());
+document.addEventListener("visibilitychange", () => { if (document.hidden) stopAll(); });
+window.addEventListener("blur", stopAll);
+
+connect();
+</script>
+</body>
+</html>

@@ -16,8 +16,10 @@
   camera_optical_frame is the same point in the optical convention (z forward, x right,
   y down) that its images use. Gazebo sensor settings are in spiderbot.gazebo.xacro.
 
-  Masses are ESTIMATES (about 2.5 kg in total). Every part has a collision shape and
-  inertia matching its visual, which Gazebo needs.
+  Masses are ESTIMATES (about 2.5 kg in total). Every part has inertia matching its
+  visual, which Gazebo needs. Collision shapes are off by default (xacro arg
+  collisions:=true adds them): the simulated robot is moved by setting its pose, not by
+  physics, and in Gazebo 9.0 its own collision shapes can show up in its lidar scan.
 
   Per leg, <leg> = front_left | middle_left | rear_left | front_right | middle_right | rear_right:
     links:  <leg>_coxa_link -> <leg>_femur_link -> <leg>_tibia_link -> <leg>_foot_link
@@ -70,17 +72,22 @@
   <material name="tibia"><color rgba="0.15 0.4 0.85 1"/></material>
   <material name="sensor"><color rgba="0.1 0.1 0.1 1"/></material>
 
-  <!-- A part's visual plus a matching collision shape and solid-body inertia, centred at xyz -->
+  <xacro:arg name="collisions" default="false"/>
+
+  <!-- A part's visual plus solid-body inertia (and, with collisions:=true, a matching
+       collision shape), centred at xyz -->
   <xacro:macro name="box_part" params="x y z xyz mass material">
     <visual>
       <origin xyz="${xyz}"/>
       <geometry><box size="${x} ${y} ${z}"/></geometry>
       <material name="${material}"/>
     </visual>
-    <collision>
-      <origin xyz="${xyz}"/>
-      <geometry><box size="${x} ${y} ${z}"/></geometry>
-    </collision>
+    <xacro:if value="$(arg collisions)">
+      <collision>
+        <origin xyz="${xyz}"/>
+        <geometry><box size="${x} ${y} ${z}"/></geometry>
+      </collision>
+    </xacro:if>
     <inertial>
       <origin xyz="${xyz}"/>
       <mass value="${mass}"/>
@@ -95,10 +102,12 @@
       <geometry><cylinder radius="${radius}" length="${length}"/></geometry>
       <material name="${material}"/>
     </visual>
-    <collision>
-      <origin xyz="${xyz}"/>
-      <geometry><cylinder radius="${radius}" length="${length}"/></geometry>
-    </collision>
+    <xacro:if value="$(arg collisions)">
+      <collision>
+        <origin xyz="${xyz}"/>
+        <geometry><cylinder radius="${radius}" length="${length}"/></geometry>
+      </collision>
+    </xacro:if>
     <inertial>
       <origin xyz="${xyz}"/>
       <mass value="${mass}"/>

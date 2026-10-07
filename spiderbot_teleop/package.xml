@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>spiderbot_teleop</name>
+  <version>0.0.0</version>
+  <description>
+    Phone/browser teleop for the Spiderbot: a web page with drive controls and the robot's
+    camera, talking to the robot through rosbridge. Publishes geometry_msgs/Twist on /cmd_vel,
+    so it drives the simulated or the real robot alike.
+  </description>
+
+  <maintainer email="dmiu7957@todo.todo">dmiu7957</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>rosbridge_server</exec_depend>
+</package>

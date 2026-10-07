@@ -50,7 +50,7 @@ Nodes on the VM use them directly.
 | Launch arg | Default | |
 |---|---|---|
 | `gazebo` | `true` | Start gzserver with the world. `false` shows only the Foxglove markers. |
-| `robot` | `true` | Spawn the Spiderbot with its sensors. It stands still with its legs in the standing pose until the walking node exists. |
+| `robot` | `true` | Spawn the Spiderbot with its sensors, driven by `sim_walker.py` (below). |
 | `spawn_x/y/z/yaw` | `-3.3 0 0 0` | Where `base_footprint` spawns: on the dirt just inside the access opening, facing +x. |
 
 The ALSA sound errors in the Gazebo output are harmless on a VM without audio.
@@ -66,6 +66,34 @@ The ALSA sound errors in the Gazebo output are harmless on a VM without audio.
 Gazebo pauses a camera that has no subscribers, so the first frame after subscribing
 is the last one from before the pause; later frames are live. Nodes that read single
 frames with `rospy.wait_for_message` should skip the first.
+
+### Walking (`scripts/sim_walker.py`)
+
+Leg physics isn't simulated. Instead the robot is driven like a mobile base: send
+`geometry_msgs/Twist` on `/cmd_vel` (`linear.x` forward, `linear.y` sideways, `angular.z`
+turn; up to 0.15 m/s and 0.6 rad/s). The walker moves the robot over the terrain by setting
+its pose in Gazebo each tick (the robot's links are kinematic, so gravity and contacts
+never move it), tilts the body to the ground under its feet, and animates a tripod gait in
+`/joint_states`. Gazebo's own copy of the legs stays in the standing pose; only Foxglove
+shows them stepping.
+
+| Output | |
+|---|---|
+| `/odom`, TF `odom -> base_footprint` | Odometry as the real robot's drivers would report it: strides read 3% short, turns 3% long, plus a random walk in heading (`~odom_noise:=false` turns this off) |
+| `/ground_truth/odom` | The true pose in the `world` frame, for checking and scoring (simulation only) |
+| `/joint_states` | Gait animation |
+
+The `odom` frame starts at the spawn pose (`world -> odom` is a fixed transform). From
+Step 4, mapping will publish `map -> odom` instead.
+
+Safety: the robot stops if no command arrives for 0.4 s, and won't walk toward anything
+`/scan` sees within 0.3 m in its direction of travel (it can still turn and back away).
+To drive it, see `spiderbot_teleop` or COMMANDS.md.
+
+CPU: on the 4-core VM, Gazebo uses about one core, plus about one more while the
+camera has subscribers (it renders on the CPU). The launch file lowers Gazebo's `/clock`
+rate to 100 Hz; at the default 1000 Hz, every ROS node on simulated time burns CPU
+processing ticks.
 
 ## The world
 

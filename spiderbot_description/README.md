@@ -81,3 +81,8 @@ ground plane of `base_footprint`. For example, `front_left_foot_link` is at abou
 [urdf/spiderbot.gazebo.xacro](urdf/spiderbot.gazebo.xacro) holds everything that only
 Gazebo uses: the sensor plugins, Gazebo colours, and kinematic links. Kinematic means
 gravity and contacts never move the robot; the walking node places it each tick instead.
+
+For the same reason the model has no collision shapes by default: nothing needs them, and
+in Gazebo 9.0 the moving robot's own collision shapes can show up in its lidar scan. Pass
+`collisions:=true` to xacro to add them (matching the visuals) if the robot is ever
+simulated with real physics.

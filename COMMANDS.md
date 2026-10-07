@@ -53,13 +53,17 @@ xvfb-run -a -s "-screen 0 1280x1024x24" roslaunch spiderbot_gazebo crawlspace.la
 Without it everything else still runs (including the lidar), but there are no camera
 images.
 
-**Session 2: rosbridge, the WebSocket server Foxglove connects to**
+The first time the camera is viewed after launching, it can take 5-10 seconds to start
+while Gazebo sets up rendering; after that it's quick.
+
+**Session 2: rosbridge (for Foxglove) and the phone teleop page**
 
 ```bash
-roslaunch rosbridge_server rosbridge_websocket.launch
+roslaunch spiderbot_teleop web_teleop.launch
 ```
 
-It's ready when it prints `Rosbridge WebSocket server started at ws://0.0.0.0:9090`.
+It's ready when it prints `Rosbridge WebSocket server started at ws://0.0.0.0:9090`. This
+starts rosbridge, so don't also run `rosbridge_server` on its own (they'd clash over port 9090).
 
 A separate `roscore` isn't needed: `roslaunch` starts one if none is running. If you do
 run your own in a third session, start it first and leave it running.
@@ -86,7 +90,32 @@ Over a plain `ssh` session the legs sweep automatically. For slider controls ins
 install XQuartz on the Mac (`brew install --cask xquartz`, then log out and back in),
 open it, and connect with `ssh -Y <user>@<vm-ip>`. The slider window then opens on the Mac.
 
-## 4. View in Foxglove (Mac)
+## 4. Drive the robot
+
+Velocity commands go on `/cmd_vel` (forward, sideways, turn). The robot walks over the
+bumps, stops by itself 0.4 s after commands stop, and won't walk into anything its lidar
+sees within 0.3 m in its direction of travel; back up or turn away to get going again.
+
+**From a phone:** open `http://<vm-ip>:8080/` in the phone's browser. The phone must be on
+the same network as the VM and able to reach its address. Hold the arrows to walk and turn,
+**side** to sidestep, **Speed** for slow/fast, **STOP** to stop. Landscape works best.
+
+If the phone can't reach the VM directly (for example the VM is on the Mac's private
+"shared" network), forward both ports through the Mac instead. Open one SSH session like
+this and keep it open:
+
+```bash
+ssh -L 0.0.0.0:8080:localhost:8080 -L 0.0.0.0:9090:localhost:9090 <user>@<vm-ip>
+```
+
+Then open `http://<mac-ip>:8080/` on the phone; `ipconfig getifaddr en0` on the Mac
+prints `<mac-ip>`. Allow incoming connections if macOS asks.
+
+**From a computer:** the same page works in any browser, with the keyboard too (arrows or
+WASD, Q/E to sidestep, Space to stop). Or use Foxglove's **Teleop** panel on topic `/cmd_vel`
+with its publish rate set to 10 Hz; at lower rates the robot stops between messages.
+
+## 5. View in Foxglove (Mac)
 
 1. Open Foxglove → **Open connection** → **Rosbridge** → `ws://<vm-ip>:9090`.
 2. Add a **3D** panel. In its settings:
@@ -111,7 +140,7 @@ If `ws://<vm-ip>:9090` won't connect, tunnel the port through SSH instead. Open 
 session with `ssh -L 9090:localhost:9090 <user>@<vm-ip>`, then connect Foxglove to
 `ws://localhost:9090`.
 
-## 5. Check what's running (any extra session)
+## 6. Check what's running (any extra session)
 
 ```bash
 rosnode list
@@ -119,7 +148,8 @@ rostopic list
 rostopic hz /scan                          # about 7 Hz
 rostopic hz /camera/rgb/image_raw          # about 10 Hz (needs xvfb-run)
 rostopic echo -n1 /joint_states/name       # 18 joint names
-rosrun tf tf_echo world base_footprint     # where the robot is
+rostopic echo -n1 /ground_truth/odom/pose/pose/position   # where the robot really is
+rostopic echo -n1 /odom/pose/pose/position                # where its odometry thinks it is
 gz stats                                   # Gazebo speed: Factor near 1.00 means real time
 ```
 
@@ -128,14 +158,17 @@ gz stats                                   # Gazebo speed: Factor near 1.00 mean
 | `/world_markers` | Crawlspace as Foxglove markers, one namespace per Gazebo model |
 | `/moisture_truth` | Ground-truth soil moisture map (answer key) |
 | `/robot_description` | Robot model (URDF) as a topic, for Foxglove |
-| `/joint_states` | Leg joint angles |
-| `/tf`, `/tf_static` | Coordinate frames |
+| `/cmd_vel` | Velocity commands in (forward, sideways, turn) |
+| `/odom` | Odometry: where the robot thinks it is, with realistic drift. Also TF `odom -> base_footprint`. |
+| `/ground_truth/odom` | Where the robot really is (simulation only, for checking and scoring) |
+| `/joint_states` | Leg joint angles (walking animation) |
+| `/tf`, `/tf_static` | Coordinate frames: `world -> odom -> base_footprint -> base_link -> ...` |
 | `/scan` | Lidar, 360 deg, 7 Hz |
 | `/camera/rgb/image_raw` (`/compressed`) | Colour camera, 640x480, 10 Hz |
 | `/camera/depth/image_raw`, `/camera/depth/points` | Depth image (metres) and point cloud, 0.6-8 m |
 | `/camera/depth/image_raw_throttle` | 1 Hz depth copy for Foxglove |
 
-## 6. Shut down
+## 7. Shut down
 
 Press **Ctrl-C** in each session (Gazebo can take ~15 seconds to stop). Then make
 sure nothing was left behind, which would stop the next launch:
@@ -145,21 +178,25 @@ killall -9 gzserver gzclient 2>/dev/null
 rosclean purge -y     # deletes old ROS logs; run when it warns the log folder is over 1 GB
 ```
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | `[gazebo-1] process has died ... exit code 255` | An old gzserver is still running. `killall -9 gzserver gzclient`, then launch again. |
 | `rosdep`: `Cannot locate rosdep definition for [...]` | `rosdep update --include-eol-distros`, then rerun `rosdep install`. |
-| Foxglove: "Check that the rosbridge WebSocket server at ws://localhost:9090 is reachable" | Use `ws://<vm-ip>:9090`, or the SSH tunnel in section 4. Check session 2 is still running. |
+| Foxglove: "Check that the rosbridge WebSocket server at ws://localhost:9090 is reachable" | Use `ws://<vm-ip>:9090`, or the SSH tunnel in section 5. Check session 2 is still running. |
 | Foxglove: only coordinate axes, no robot | Turn on `/robot_description` under **Topics**. Don't add it as a custom URDF layer: over rosbridge that gives "Invalid topic". |
 | Foxglove: "Failed to process all transforms on topic /tf" | 3D panel → **Transforms** → switch off **Enable preloading**, then reconnect. |
 | Foxglove, on `/scan`: "N Infinity invalid values detected" | Expected. Beams that hit nothing (for example out through the access opening) are reported as infinity, the ROS standard for "no return", and mapping uses them as free space. Set `/scan`'s **Color mode** to **Flat** to clear the warning. |
 | No camera images | Gazebo wasn't started under `xvfb-run`. Restart session 1 with the command in section 3. |
 | `ALSA lib ... error` lines from Gazebo | Harmless: the VM has no sound card. |
+| The robot won't walk forward | Its lidar sees something within 0.3 m in that direction (safety stop). Back up or turn away. |
+| Phone page says "no connection to ws://...:9090" | Session 2 must be `web_teleop.launch` and still running. If the phone can't reach the VM, use the port forwarding in section 4. |
+| Camera view takes a while to appear | Normal the first time after launching (5-10 s while Gazebo sets up rendering). |
+| Camera or robot motion very slow or frozen | Check Gazebo's speed with `gz stats` (Factor should be near 1.00). If it's far lower, something is starving the VM's CPU; restart the simulation. |
 | The first camera frame you grab looks out of date | Normal: Gazebo pauses cameras with no subscribers, so the first frame after subscribing is old. Later frames are live. |
 
-## 8. Changing the crawlspace
+## 9. Changing the crawlspace
 
 The world, its meshes, the moisture map and the answer key are generated. Edit the layout
 in `spiderbot_gazebo/scripts/generate_crawlspace.py`, then regenerate (works on the VM or the Mac,

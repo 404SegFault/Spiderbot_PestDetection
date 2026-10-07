@@ -1,0 +1,12 @@
+<launch>
+  <!-- rosbridge on port 9090 (Foxglove and the phone page both use it) plus the phone
+       teleop page at http://<vm-ip>:8080/. Use this instead of starting rosbridge on its own. -->
+  <arg name="port" default="8080"/>
+
+  <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch"/>
+
+  <node name="web_teleop_server" pkg="spiderbot_teleop" type="web_server.py" output="screen">
+    <param name="port" value="$(arg port)"/>
+    <param name="www" value="$(find spiderbot_teleop)/www"/>
+  </node>
+</launch>

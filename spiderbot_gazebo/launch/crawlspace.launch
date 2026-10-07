@@ -16,6 +16,11 @@
   <arg name="spawn_z" default="0.0"/>
   <arg name="spawn_yaw" default="0.0"/>
 
+  <!-- Gazebo publishes /clock every physics step (1000 Hz) by default, and every node
+       running on simulated time has to process each tick. 100 Hz is plenty here and saves
+       most of a CPU core on the VM. -->
+  <param name="/gazebo/pub_clock_frequency" value="100"/>
+
   <include if="$(arg gazebo)" file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(arg world)"/>
     <arg name="gui" value="false"/>
@@ -45,17 +50,27 @@
            command="$(find xacro)/xacro '$(find spiderbot_description)/urdf/spiderbot.urdf.xacro'"/>
     <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"/>
     <node name="robot_description_publisher" pkg="spiderbot_description" type="robot_description_publisher.py"/>
-    <!-- Legs held at the standing pose, matching the static model in Gazebo -->
-    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher"/>
     <node if="$(arg gazebo)" name="spawn_spiderbot" pkg="gazebo_ros" type="spawn_model"
           args="-urdf -param robot_description -model spiderbot
                 -x $(arg spawn_x) -y $(arg spawn_y) -z $(arg spawn_z) -Y $(arg spawn_yaw)"/>
-    <!-- Where the robot is. Fixed for now; the walking node will publish this as it moves. -->
-    <node name="robot_pose_tf" pkg="tf2_ros" type="static_transform_publisher"
-          args="$(arg spawn_x) $(arg spawn_y) $(arg spawn_z) $(arg spawn_yaw) 0 0 world base_footprint"/>
+    <!-- Pretend walking: drive it with geometry_msgs/Twist on /cmd_vel. Publishes /odom
+         (with drift), TF odom -> base_footprint, /joint_states (gait) and /ground_truth/odom. -->
+    <node name="sim_walker" pkg="spiderbot_gazebo" type="sim_walker.py" output="screen">
+      <param name="spawn_x" value="$(arg spawn_x)"/>
+      <param name="spawn_y" value="$(arg spawn_y)"/>
+      <param name="spawn_yaw" value="$(arg spawn_yaw)"/>
+      <param name="terrain_mesh" value="$(find spiderbot_gazebo)/models/crawlspace_terrain/meshes/terrain.stl"/>
+    </node>
+    <!-- The odom frame starts where the robot starts -->
+    <node name="odom_origin_tf" pkg="tf2_ros" type="static_transform_publisher"
+          args="$(arg spawn_x) $(arg spawn_y) 0 $(arg spawn_yaw) 0 0 world odom"/>
     <!-- Raw depth images (~1.2 MB each) are too big to stream over rosbridge, so Foxglove
-         gets this 1 Hz copy. The colour image streams as /camera/rgb/image_raw/compressed. -->
+         gets this 1 Hz copy. The colour image streams as /camera/rgb/image_raw/compressed.
+         Lazy: it only subscribes while someone views the output, because Gazebo renders
+         the camera (on the CPU, about a core) only while it has subscribers. -->
     <node name="depth_throttle" pkg="topic_tools" type="throttle"
-          args="messages camera/depth/image_raw 1.0 camera/depth/image_raw_throttle"/>
+          args="messages camera/depth/image_raw 1.0 camera/depth/image_raw_throttle">
+      <param name="lazy" value="true"/>
+    </node>
   </group>
 </launch>
